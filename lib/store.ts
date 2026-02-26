@@ -9,6 +9,12 @@ import {
   DEFAULT_SETTINGS,
 } from './types';
 import { createNewItem, getNextReview, getDueItems } from './srs';
+import {
+  parseImportJson,
+  buildImportDedupKey,
+  ImportActionOptions,
+  ImportResult,
+} from './import';
 
 interface RecallStore {
   items: RecallItem[];
@@ -32,6 +38,10 @@ interface RecallStore {
   deleteCategory: (id: string) => void;
 
   updateSettings: (updates: Partial<Settings>) => void;
+  bulkImportFromJson: (
+    rawJson: string,
+    options?: ImportActionOptions
+  ) => ImportResult;
 
   getTodayItems: () => RecallItem[];
   getItemById: (id: string) => RecallItem | undefined;
@@ -118,6 +128,100 @@ export const useStore = create<RecallStore>()(
         }));
       },
 
+      bulkImportFromJson: (rawJson, options) => {
+        const state = get();
+        const parsed = parseImportJson(rawJson, state.settings.defaultIntervals);
+
+        const resultBase: Omit<ImportResult, 'imported' | 'skippedDuplicates'> = {
+          total: parsed.total,
+          valid: parsed.validItems.length,
+          skippedInvalid: parsed.invalidRows.length,
+          warnings: [...parsed.warnings],
+          errors: [...parsed.errors],
+          invalidRows: parsed.invalidRows,
+        };
+
+        if (parsed.errors.length > 0) {
+          return {
+            ...resultBase,
+            imported: 0,
+            skippedDuplicates: 0,
+          };
+        }
+
+        const dedupeKeys = new Set<string>();
+        state.items.forEach((item) => {
+          dedupeKeys.add(
+            buildImportDedupKey({
+              externalId: item.externalId,
+              sourceAssetId: item.sourceAssetId,
+              content: item.content,
+              source: item.source,
+              locationCfi: item.locationCfi,
+            })
+          );
+        });
+
+        const itemsToImport: RecallItem[] = [];
+        let skippedDuplicates = 0;
+
+        parsed.validItems.forEach((row) => {
+          const categoryId = resolveImportCategoryId(row.categoryId, state.categories);
+          const mappedSource = row.source ?? parsed.source?.bookTitle ?? '';
+
+          const dedupeKey = buildImportDedupKey({
+            externalId: row.externalId,
+            sourceAssetId: parsed.source?.assetId,
+            content: row.content,
+            source: mappedSource,
+            locationCfi: row.meta?.locationCfi,
+          });
+
+          if (dedupeKeys.has(dedupeKey)) {
+            skippedDuplicates += 1;
+            return;
+          }
+
+          dedupeKeys.add(dedupeKey);
+
+          const item = createNewItem({
+            content: row.content,
+            detail: row.detail,
+            source: mappedSource,
+            categoryId,
+            intervals: row.intervals,
+            externalId: row.externalId,
+            sourceAssetId: parsed.source?.assetId,
+            sourceProvider: parsed.source?.provider,
+            locationCfi: row.meta?.locationCfi,
+            highlightedAt: row.meta?.highlightedAt,
+            highlightStyle: row.meta?.style,
+          });
+
+          itemsToImport.push(item);
+        });
+
+        if (skippedDuplicates > 0) {
+          resultBase.warnings.push(
+            `Skipped ${skippedDuplicates} duplicate item${
+              skippedDuplicates === 1 ? '' : 's'
+            }.`
+          );
+        }
+
+        if (!options?.dryRun && itemsToImport.length > 0) {
+          set((current) => ({
+            items: [...itemsToImport, ...current.items],
+          }));
+        }
+
+        return {
+          ...resultBase,
+          imported: itemsToImport.length,
+          skippedDuplicates,
+        };
+      },
+
       getTodayItems: () => getDueItems(get().items),
 
       getItemById: (id) => get().items.find((item) => item.id === id),
@@ -130,3 +234,20 @@ export const useStore = create<RecallStore>()(
     }
   )
 );
+
+function resolveImportCategoryId(
+  categoryId: string | undefined,
+  categories: Category[]
+): string {
+  if (categoryId && categories.some((category) => category.id === categoryId)) {
+    return categoryId;
+  }
+
+  const quotesCategory = categories.find((category) => category.id === 'quotes');
+  if (quotesCategory) return quotesCategory.id;
+
+  const otherCategory = categories.find((category) => category.id === 'other');
+  if (otherCategory) return otherCategory.id;
+
+  return categories[0]?.id ?? 'other';
+}

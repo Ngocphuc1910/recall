@@ -10,6 +10,7 @@ import {
   useColorScheme,
   Platform,
 } from 'react-native';
+import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import Colors from '@/constants/Colors';
 import { useStore } from '@/lib/store';
@@ -17,6 +18,7 @@ import { useStore } from '@/lib/store';
 export default function SettingsScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme];
+  const router = useRouter();
 
   const settings = useStore((s) => s.settings);
   const categories = useStore((s) => s.categories);
@@ -194,6 +196,40 @@ export default function SettingsScreen() {
 
       <View style={styles.section}>
         <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
+          IMPORT
+        </Text>
+        <TouchableOpacity
+          onPress={() => router.push('/import')}
+          style={[
+            styles.card,
+            styles.linkRow,
+            { backgroundColor: colors.surface, borderColor: colors.borderLight },
+          ]}
+          activeOpacity={0.7}
+        >
+          <View style={styles.linkLeft}>
+            <Ionicons
+              name="cloud-upload-outline"
+              size={20}
+              color={colors.tint}
+            />
+            <Text style={[styles.linkText, { color: colors.text }]}>
+              Bulk Import JSON
+            </Text>
+          </View>
+          <Ionicons
+            name="chevron-forward"
+            size={16}
+            color={colors.textTertiary}
+          />
+        </TouchableOpacity>
+        <Text style={[styles.sectionNote, { color: colors.textTertiary }]}>
+          Paste Apple Books highlights JSON and import as Recall items.
+        </Text>
+      </View>
+
+      <View style={styles.section}>
+        <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
           ABOUT
         </Text>
         <View
@@ -316,4 +352,13 @@ const styles = StyleSheet.create({
   catLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   catName: { fontSize: 16 },
   catCount: { fontSize: 14 },
+  linkRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  linkLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  linkText: { fontSize: 16, fontWeight: '500' },
 });

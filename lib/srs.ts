@@ -8,6 +8,12 @@ export function createNewItem(
     source?: string;
     intervals?: number[];
     status?: 'active' | 'archived';
+    externalId?: string;
+    sourceAssetId?: string;
+    sourceProvider?: string;
+    locationCfi?: string;
+    highlightedAt?: string;
+    highlightStyle?: number;
   }
 ): RecallItem {
   const now = Date.now();
@@ -18,6 +24,12 @@ export function createNewItem(
     detail: partial.detail ?? '',
     categoryId: partial.categoryId,
     source: partial.source ?? '',
+    externalId: partial.externalId,
+    sourceAssetId: partial.sourceAssetId,
+    sourceProvider: partial.sourceProvider,
+    locationCfi: partial.locationCfi,
+    highlightedAt: partial.highlightedAt,
+    highlightStyle: partial.highlightStyle,
     createdAt: now,
     nextReviewDate: addDays(now, intervals[0]),
     currentInterval: intervals[0],

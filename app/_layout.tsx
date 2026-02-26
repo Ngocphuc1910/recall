@@ -1,4 +1,5 @@
 import FontAwesome from '@expo/vector-icons/FontAwesome';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import {
   DarkTheme,
   DefaultTheme,
@@ -8,7 +9,7 @@ import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
-import { useColorScheme } from 'react-native';
+import { Platform, View, useColorScheme } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';
 
@@ -24,6 +25,7 @@ export default function RootLayout() {
   const [loaded, error] = useFonts({
     SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
     ...FontAwesome.font,
+    ...Ionicons.font,
   });
 
   useEffect(() => {
@@ -47,17 +49,26 @@ function RootLayoutNav() {
   const colorScheme = useColorScheme();
 
   const navTheme = colorScheme === 'dark' ? DarkTheme : DefaultTheme;
+  const AppContainer = Platform.OS === 'web' ? View : GestureHandlerRootView;
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
+    <AppContainer style={{ flex: 1 }}>
       <ThemeProvider value={navTheme}>
         <Stack>
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen
             name="add"
             options={{
-              presentation: 'modal',
+              presentation: Platform.OS === 'web' ? 'card' : 'modal',
               headerTitle: 'Add Item',
+              headerShadowVisible: false,
+            }}
+          />
+          <Stack.Screen
+            name="import"
+            options={{
+              presentation: Platform.OS === 'web' ? 'card' : 'modal',
+              headerTitle: 'Bulk Import JSON',
               headerShadowVisible: false,
             }}
           />
@@ -71,6 +82,6 @@ function RootLayoutNav() {
           />
         </Stack>
       </ThemeProvider>
-    </GestureHandlerRootView>
+    </AppContainer>
   );
 }

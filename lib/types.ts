@@ -4,6 +4,12 @@ export interface RecallItem {
   detail: string;
   categoryId: string;
   source: string;
+  externalId?: string;
+  sourceAssetId?: string;
+  sourceProvider?: string;
+  locationCfi?: string;
+  highlightedAt?: string;
+  highlightStyle?: number;
   createdAt: number;
   nextReviewDate: number;
   currentInterval: number;
