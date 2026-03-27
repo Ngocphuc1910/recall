@@ -135,7 +135,15 @@ export default function RecallCard({ item, onPress, onRecall }: Props) {
                     •
                   </Text>
                   <Text style={[styles.itemMeta, { color: colors.textTertiary }]}>
-                    Day {item.currentInterval}
+                    {(() => {
+                      const d = new Date(item.nextReviewDate);
+                      const now = new Date();
+                      now.setHours(0, 0, 0, 0);
+                      const diff = Math.floor((d.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                      if (diff <= 0) return 'Today';
+                      if (diff === 1) return 'Tomorrow';
+                      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                    })()}
                   </Text>
                 </View>
 
