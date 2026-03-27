@@ -5,9 +5,16 @@
   "scripts": {
     "dev": "expo start",
     "start": "expo start",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
-    "web": "expo start --web"
+    "android": "expo run:android",
+    "ios": "expo run:ios",
+    "web": "expo start --web",
+    "web:premium": "npm --workspace apps/web run dev",
+    "web:premium:build": "npm --workspace apps/web run build",
+    "sync:apple-books": "node scripts/apple-books-sync.mjs",
+    "watch:apple-books": "node scripts/apple-books-sync.mjs --watch",
+    "build:ios:preview": "npx eas-cli@latest build --platform ios --profile preview",
+    "build:ios:production": "npx eas-cli@latest build --platform ios --profile production",
+    "tokens:generate": "node packages/design-tokens/scripts/generate.mjs"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
@@ -40,5 +47,9 @@
     "react-test-renderer": "19.1.0",
     "typescript": "~5.9.2"
   },
-  "private": true
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ]
 }

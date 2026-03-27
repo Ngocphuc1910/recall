@@ -1,12 +1,25 @@
 import React from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
-import { useColorScheme } from 'react-native';
+import { StyleSheet, useColorScheme } from 'react-native';
 import Colors from '@/constants/Colors';
+import {
+  TabBarVisibilityProvider,
+  useTabBarVisibility,
+} from '@/lib/tab-bar-visibility';
 
 export default function TabLayout() {
+  return (
+    <TabBarVisibilityProvider>
+      <TabLayoutContent />
+    </TabBarVisibilityProvider>
+  );
+}
+
+function TabLayoutContent() {
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme];
+  const { isTabBarHidden } = useTabBarVisibility();
 
   return (
     <Tabs
@@ -16,8 +29,17 @@ export default function TabLayout() {
         tabBarInactiveTintColor: colors.tabIconDefault,
         tabBarStyle: {
           backgroundColor: colors.surface,
-          borderTopColor: colors.border,
-          borderTopWidth: 0.5,
+          borderTopColor: colors.borderLight,
+          borderTopWidth: isTabBarHidden ? 0 : StyleSheet.hairlineWidth,
+          height: isTabBarHidden ? 0 : 64,
+          paddingTop: isTabBarHidden ? 0 : 6,
+          paddingBottom: isTabBarHidden ? 0 : 8,
+          overflow: 'hidden',
+        },
+        tabBarLabelStyle: {
+          fontSize: 11,
+          fontWeight: '700',
+          letterSpacing: 0.2,
         },
         headerStyle: {
           backgroundColor: colors.background,

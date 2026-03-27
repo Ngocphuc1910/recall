@@ -17,14 +17,19 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import Colors from '@/constants/Colors';
 import { useStore } from '@/lib/store';
+import { useTabBarScrollHandler } from '@/lib/tab-bar-visibility';
 import RecallCard from '@/components/RecallCard';
 import EmptyState from '@/components/EmptyState';
+import CategoryPicker from '@/components/CategoryPicker';
+import PriorityPicker from '@/components/PriorityPicker';
+import { DEFAULT_PRIORITY_CODE, PriorityCode } from '@/lib/types';
 
 export default function TodayScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme];
   const isWeb = Platform.OS === 'web';
   const router = useRouter();
+  const tabBarScroll = useTabBarScrollHandler();
 
   const items = useStore((s) => s.items);
   const categories = useStore((s) => s.categories);
@@ -36,6 +41,8 @@ export default function TodayScreen() {
   const [detail, setDetail] = useState('');
   const [source, setSource] = useState('');
   const [categoryId, setCategoryId] = useState(categories[0]?.id ?? 'other');
+  const [priorityCode, setPriorityCode] =
+    useState<PriorityCode>(DEFAULT_PRIORITY_CODE);
 
   useEffect(() => {
     if (!categories.find((c) => c.id === categoryId)) {
@@ -65,6 +72,7 @@ export default function TodayScreen() {
     setDetail('');
     setSource('');
     setCategoryId(categories[0]?.id ?? 'other');
+    setPriorityCode(DEFAULT_PRIORITY_CODE);
   };
 
   const handleSaveAdd = () => {
@@ -75,6 +83,7 @@ export default function TodayScreen() {
       detail: detail.trim(),
       source: source.trim(),
       categoryId,
+      priorityCode,
     });
 
     resetAddForm();
@@ -174,42 +183,19 @@ export default function TodayScreen() {
 
         <View style={styles.field}>
           <Text style={[styles.label, { color: colors.textSecondary }]}>CATEGORY</Text>
-          <View style={styles.categoryGrid}>
-            {categories.map((cat) => {
-              const isSelected = categoryId === cat.id;
-              return (
-                <TouchableOpacity
-                  key={cat.id}
-                  onPress={() => setCategoryId(cat.id)}
-                  style={[
-                    styles.categoryCard,
-                    {
-                      backgroundColor: isSelected ? cat.color + '18' : colors.surface,
-                      borderColor: isSelected ? cat.color : colors.border,
-                      borderWidth: isSelected ? 1.5 : StyleSheet.hairlineWidth,
-                    },
-                  ]}
-                >
-                  <Ionicons
-                    name={cat.icon as any}
-                    size={22}
-                    color={isSelected ? cat.color : colors.textTertiary}
-                  />
-                  <Text
-                    style={[
-                      styles.categoryLabel,
-                      {
-                        color: isSelected ? cat.color : colors.textSecondary,
-                        fontWeight: isSelected ? '600' : '400',
-                      },
-                    ]}
-                  >
-                    {cat.name}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
+          <CategoryPicker
+            categories={categories}
+            selectedCategoryId={categoryId}
+            onSelect={setCategoryId}
+          />
+        </View>
+
+        <View style={styles.field}>
+          <Text style={[styles.label, { color: colors.textSecondary }]}>PRIORITY</Text>
+          <PriorityPicker
+            selectedPriorityCode={priorityCode}
+            onSelect={setPriorityCode}
+          />
         </View>
 
         <View style={styles.modalActions}>
@@ -269,7 +255,10 @@ export default function TodayScreen() {
         <TouchableOpacity
           onPress={openAddModal}
           hitSlop={10}
-          style={[styles.addButton, { backgroundColor: colors.tint }]}
+          style={[
+            styles.addButton,
+            { backgroundColor: colors.tint, shadowColor: colors.tint },
+          ]}
           activeOpacity={0.8}
         >
           <Ionicons name="add" size={24} color="#fff" />
@@ -286,10 +275,21 @@ export default function TodayScreen() {
         <FlatList
           data={todayItems}
           keyExtractor={(item) => item.id}
+          onScroll={tabBarScroll.onScroll}
+          scrollEventThrottle={tabBarScroll.scrollEventThrottle}
           renderItem={({ item }) => (
             <RecallCard
               item={item}
-              onPress={() => router.push(`/item/${item.id}`)}
+              onPress={() =>
+                router.push({
+                  pathname: '/item/[id]',
+                  params: {
+                    id: item.id,
+                    sourceView: 'today',
+                    itemIds: todayItems.map((entry) => entry.id).join(','),
+                  },
+                })
+              }
               onRecall={() => markRecalled(item.id)}
             />
           )}
@@ -345,7 +345,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 2,
-    shadowColor: '#007AFF',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
@@ -422,23 +421,6 @@ const styles = StyleSheet.create({
   },
   detailInput: {
     minHeight: 60,
-  },
-  categoryGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-  },
-  categoryCard: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 12,
-    minWidth: 90,
-    gap: 4,
-  },
-  categoryLabel: {
-    fontSize: 13,
   },
   modalActions: {
     flexDirection: 'row',

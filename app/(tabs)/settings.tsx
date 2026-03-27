@@ -14,16 +14,27 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import Colors from '@/constants/Colors';
 import { useStore } from '@/lib/store';
+import { useTabBarScrollHandler } from '@/lib/tab-bar-visibility';
 
 export default function SettingsScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme];
   const router = useRouter();
+  const tabBarScroll = useTabBarScrollHandler();
 
   const settings = useStore((s) => s.settings);
   const categories = useStore((s) => s.categories);
   const items = useStore((s) => s.items);
   const updateSettings = useStore((s) => s.updateSettings);
+  const stagedHighlights = useStore((s) => s.stagedHighlights);
+  const syncRequests = useStore((s) => s.syncRequests);
+  const requestAppleBooksSync = useStore((s) => s.requestAppleBooksSync);
+  const cloudAuthStatus = useStore((s) => s.cloudAuthStatus);
+  const cloudSyncStatus = useStore((s) => s.cloudSyncStatus);
+  const cloudUserId = useStore((s) => s.cloudUserId);
+  const cloudError = useStore((s) => s.cloudError);
+  const lastSyncedAt = useStore((s) => s.lastSyncedAt);
+  const initializeCloudSync = useStore((s) => s.initializeCloudSync);
 
   const [editingIntervals, setEditingIntervals] = useState(false);
   const [intervalsText, setIntervalsText] = useState(
@@ -53,13 +64,112 @@ export default function SettingsScreen() {
   const activeCount = items.filter((i) => i.status === 'active').length;
   const archivedCount = items.filter((i) => i.status === 'archived').length;
   const totalReviews = items.reduce((sum, i) => sum + i.reviewCount, 0);
+  const pendingApprovals = stagedHighlights.filter(
+    (highlight) => highlight.approvalStatus === 'pending'
+  ).length;
+  const latestAppleBooksRequest = syncRequests.find(
+    (request) => request.source === 'apple_books'
+  );
+  const appleBooksSyncInFlight =
+    latestAppleBooksRequest?.status === 'pending' ||
+    latestAppleBooksRequest?.status === 'running';
+
+  const handleAppleBooksSync = async () => {
+    try {
+      await requestAppleBooksSync();
+      if (Platform.OS === 'web') {
+        alert('Apple Books sync requested. Your Mac sync agent can fetch it now.');
+      } else {
+        Alert.alert(
+          'Sync Requested',
+          'Apple Books sync requested. Your Mac sync agent can fetch it now.'
+        );
+      }
+    } catch {
+      const message = 'Unable to request Apple Books sync.';
+      if (Platform.OS === 'web') {
+        alert(message);
+      } else {
+        Alert.alert('Error', message);
+      }
+    }
+  };
 
   return (
     <ScrollView
       style={[styles.container, { backgroundColor: colors.background }]}
       contentContainerStyle={styles.content}
+      onScroll={tabBarScroll.onScroll}
+      scrollEventThrottle={tabBarScroll.scrollEventThrottle}
     >
       <Text style={[styles.title, { color: colors.text }]}>Settings</Text>
+
+      <View style={styles.section}>
+        <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
+          CLOUD SYNC
+        </Text>
+        <View
+          style={[
+            styles.card,
+            { backgroundColor: colors.surface, borderColor: colors.borderLight },
+          ]}
+        >
+          <StatRow
+            label="Auth"
+            value={formatCloudStatus(cloudAuthStatus)}
+            colors={colors}
+          />
+          <View style={[styles.divider, { backgroundColor: colors.borderLight }]} />
+          <StatRow
+            label="Sync"
+            value={formatCloudStatus(cloudSyncStatus)}
+            colors={colors}
+          />
+          <View style={[styles.divider, { backgroundColor: colors.borderLight }]} />
+          <StatRow
+            label="User ID"
+            value={cloudUserId ? `${cloudUserId.slice(0, 8)}...` : 'Not signed in'}
+            colors={colors}
+          />
+          <View style={[styles.divider, { backgroundColor: colors.borderLight }]} />
+          <StatRow
+            label="Last Sync"
+            value={lastSyncedAt ? formatDateTime(lastSyncedAt) : 'Not yet'}
+            colors={colors}
+          />
+        </View>
+
+        <TouchableOpacity
+          onPress={initializeCloudSync}
+          style={[
+            styles.card,
+            styles.linkRow,
+            { backgroundColor: colors.surface, borderColor: colors.borderLight },
+          ]}
+          activeOpacity={0.7}
+        >
+          <View style={styles.linkLeft}>
+            <Ionicons name="sync-outline" size={20} color={colors.tint} />
+            <Text style={[styles.linkText, { color: colors.text }]}>
+              Retry Firebase Sync
+            </Text>
+          </View>
+          <Ionicons
+            name="chevron-forward"
+            size={16}
+            color={colors.textTertiary}
+          />
+        </TouchableOpacity>
+
+        <Text style={[styles.sectionNote, { color: colors.textTertiary }]}>
+          Recall now saves locally first and syncs to Firestore when Firebase auth is available.
+        </Text>
+        {cloudError ? (
+          <Text style={[styles.sectionNote, { color: colors.destructive }]}>
+            {cloudError}
+          </Text>
+        ) : null}
+      </View>
 
       <View style={styles.section}>
         <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
@@ -196,6 +306,99 @@ export default function SettingsScreen() {
 
       <View style={styles.section}>
         <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
+          APPLE BOOKS
+        </Text>
+        <View
+          style={[
+            styles.card,
+            { backgroundColor: colors.surface, borderColor: colors.borderLight },
+          ]}
+        >
+          <StatRow
+            label="Pending Approval"
+            value={String(pendingApprovals)}
+            colors={colors}
+          />
+          <View style={[styles.divider, { backgroundColor: colors.borderLight }]} />
+          <StatRow
+            label="Last Request"
+            value={
+              latestAppleBooksRequest
+                ? formatCloudStatus(latestAppleBooksRequest.status)
+                : 'Not requested'
+            }
+            colors={colors}
+          />
+        </View>
+
+        <TouchableOpacity
+          onPress={handleAppleBooksSync}
+          disabled={appleBooksSyncInFlight}
+          style={[
+            styles.card,
+            styles.linkRow,
+            {
+              backgroundColor: colors.surface,
+              borderColor: colors.borderLight,
+              opacity: appleBooksSyncInFlight ? 0.65 : 1,
+            },
+          ]}
+          activeOpacity={0.7}
+        >
+          <View style={styles.linkLeft}>
+            <Ionicons name="sync-outline" size={20} color={colors.tint} />
+            <Text style={[styles.linkText, { color: colors.text }]}>
+              {appleBooksSyncInFlight
+                ? 'Apple Books Sync In Progress'
+                : 'Request Apple Books Sync'}
+            </Text>
+          </View>
+          <Ionicons
+            name="chevron-forward"
+            size={16}
+            color={colors.textTertiary}
+          />
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          onPress={() => router.push('/waiting-approval' as any)}
+          style={[
+            styles.card,
+            styles.linkRow,
+            { backgroundColor: colors.surface, borderColor: colors.borderLight },
+          ]}
+          activeOpacity={0.7}
+        >
+          <View style={styles.linkLeft}>
+            <Ionicons
+              name="checkmark-done-circle-outline"
+              size={20}
+              color={colors.tint}
+            />
+            <Text style={[styles.linkText, { color: colors.text }]}>
+              Open Waiting Approval
+            </Text>
+          </View>
+          <Ionicons
+            name="chevron-forward"
+            size={16}
+            color={colors.textTertiary}
+          />
+        </TouchableOpacity>
+
+        <Text style={[styles.sectionNote, { color: colors.textTertiary }]}>
+          Synced Apple Books highlights stay in Waiting Approval until you choose a
+          category and approve them.
+        </Text>
+        {latestAppleBooksRequest?.resultSummary ? (
+          <Text style={[styles.sectionNote, { color: colors.textTertiary }]}>
+            {latestAppleBooksRequest.resultSummary}
+          </Text>
+        ) : null}
+      </View>
+
+      <View style={styles.section}>
+        <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
           IMPORT
         </Text>
         <TouchableOpacity
@@ -264,6 +467,19 @@ function StatRow({
       <Text style={[statStyles.value, { color: colors.text }]}>{value}</Text>
     </View>
   );
+}
+
+function formatCloudStatus(status: string) {
+  return status.charAt(0).toUpperCase() + status.slice(1);
+}
+
+function formatDateTime(timestamp: number) {
+  return new Date(timestamp).toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
 }
 
 const statStyles = StyleSheet.create({

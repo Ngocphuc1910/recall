@@ -1,4 +1,10 @@
-import { RecallItem, DEFAULT_INTERVALS } from './types';
+import {
+  DEFAULT_INTERVALS,
+  DEFAULT_PRIORITY_CODE,
+  RecallItem,
+  getPriorityDefinition,
+  normalizePriorityLabel,
+} from './types';
 
 export function createNewItem(
   partial: {
@@ -14,23 +20,35 @@ export function createNewItem(
     locationCfi?: string;
     highlightedAt?: string;
     highlightStyle?: number;
+    priorityCode?: number;
+    priorityLabel?: string;
+    createdAt?: number;
   }
 ): RecallItem {
   const now = Date.now();
   const intervals = partial.intervals ?? DEFAULT_INTERVALS;
+  const priority = getPriorityDefinition(
+    partial.priorityCode ?? partial.highlightStyle ?? DEFAULT_PRIORITY_CODE
+  );
+  const createdAt =
+    typeof partial.createdAt === 'number' && Number.isFinite(partial.createdAt)
+      ? partial.createdAt
+      : now;
   return {
     id: generateId(),
     content: partial.content,
     detail: partial.detail ?? '',
     categoryId: partial.categoryId,
     source: partial.source ?? '',
+    priorityCode: priority.code,
+    priorityLabel: normalizePriorityLabel(partial.priorityLabel, priority.code),
     externalId: partial.externalId,
     sourceAssetId: partial.sourceAssetId,
     sourceProvider: partial.sourceProvider,
     locationCfi: partial.locationCfi,
     highlightedAt: partial.highlightedAt,
     highlightStyle: partial.highlightStyle,
-    createdAt: now,
+    createdAt,
     nextReviewDate: addDays(now, intervals[0]),
     currentInterval: intervals[0],
     intervalIndex: 0,

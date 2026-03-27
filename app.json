@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "recall",
+    "name": "Recall",
     "slug": "recall",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -14,13 +14,16 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.make10000hours.recall",
+      "buildNumber": "1.0.0"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
+      "package": "com.make10000hours.recall",
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false
     },
@@ -34,6 +37,16 @@
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "firebase": {
+        "projectId": "recall-memory-20260326"
+      },
+      "router": {},
+      "eas": {
+        "projectId": "b5473bb5-a77a-4ee4-bb7f-d722a7cdd574"
+      }
+    },
+    "owner": "ngocpuck.1910"
   }
 }

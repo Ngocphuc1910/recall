@@ -13,7 +13,10 @@ import {
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import Colors from '@/constants/Colors';
+import CategoryPicker from '@/components/CategoryPicker';
+import PriorityPicker from '@/components/PriorityPicker';
 import { useStore } from '@/lib/store';
+import { DEFAULT_PRIORITY_CODE, PriorityCode } from '@/lib/types';
 
 export default function AddScreen() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -27,6 +30,8 @@ export default function AddScreen() {
   const [detail, setDetail] = useState('');
   const [source, setSource] = useState('');
   const [categoryId, setCategoryId] = useState(categories[0]?.id ?? 'other');
+  const [priorityCode, setPriorityCode] =
+    useState<PriorityCode>(DEFAULT_PRIORITY_CODE);
 
   const canSave = content.trim().length > 0;
 
@@ -37,6 +42,7 @@ export default function AddScreen() {
       detail: detail.trim(),
       source: source.trim(),
       categoryId,
+      priorityCode,
     });
     router.back();
   };
@@ -122,44 +128,21 @@ export default function AddScreen() {
           <Text style={[styles.label, { color: colors.textSecondary }]}>
             CATEGORY
           </Text>
-          <View style={styles.categoryGrid}>
-            {categories.map((cat) => {
-              const isSelected = categoryId === cat.id;
-              return (
-                <TouchableOpacity
-                  key={cat.id}
-                  onPress={() => setCategoryId(cat.id)}
-                  style={[
-                    styles.categoryCard,
-                    {
-                      backgroundColor: isSelected
-                        ? cat.color + '18'
-                        : colors.surface,
-                      borderColor: isSelected ? cat.color : colors.border,
-                      borderWidth: isSelected ? 1.5 : StyleSheet.hairlineWidth,
-                    },
-                  ]}
-                >
-                  <Ionicons
-                    name={cat.icon as any}
-                    size={22}
-                    color={isSelected ? cat.color : colors.textTertiary}
-                  />
-                  <Text
-                    style={[
-                      styles.categoryLabel,
-                      {
-                        color: isSelected ? cat.color : colors.textSecondary,
-                        fontWeight: isSelected ? '600' : '400',
-                      },
-                    ]}
-                  >
-                    {cat.name}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
+          <CategoryPicker
+            categories={categories}
+            selectedCategoryId={categoryId}
+            onSelect={setCategoryId}
+          />
+        </View>
+
+        <View style={styles.field}>
+          <Text style={[styles.label, { color: colors.textSecondary }]}>
+            PRIORITY
+          </Text>
+          <PriorityPicker
+            selectedPriorityCode={priorityCode}
+            onSelect={setPriorityCode}
+          />
         </View>
 
         <TouchableOpacity
@@ -203,23 +186,6 @@ const styles = StyleSheet.create({
   },
   detailInput: {
     minHeight: 60,
-  },
-  categoryGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-  },
-  categoryCard: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 12,
-    minWidth: 90,
-    gap: 4,
-  },
-  categoryLabel: {
-    fontSize: 13,
   },
   saveButton: {
     flexDirection: 'row',

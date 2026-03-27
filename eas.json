@@ -1,0 +1,21 @@
+{
+  "cli": {
+    "version": ">= 16.0.0",
+    "requireCommit": false,
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "preview": {
+      "distribution": "internal",
+      "ios": {
+        "resourceClass": "m-medium"
+      }
+    },
+    "production": {
+      "distribution": "store",
+      "ios": {
+        "resourceClass": "m-medium"
+      }
+    }
+  }
+}

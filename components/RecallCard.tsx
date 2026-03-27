@@ -19,8 +19,8 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
 import Colors from '@/constants/Colors';
 import { RecallItem } from '@/lib/types';
-import { getIntervalLabel } from '@/lib/srs';
 import { useStore } from '@/lib/store';
+import PriorityBadge from '@/components/PriorityBadge';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const SWIPE_THRESHOLD = -120;
@@ -160,6 +160,14 @@ export default function RecallCard({ item, onPress, onRecall }: Props) {
                   {item.source}
                 </Text>
               ) : null}
+
+              <View style={styles.metaFooter}>
+                <PriorityBadge
+                  priorityCode={item.priorityCode}
+                  priorityLabel={item.priorityLabel}
+                  compact
+                />
+              </View>
             </View>
 
             <Ionicons
@@ -252,6 +260,9 @@ const styles = StyleSheet.create({
   sourceText: {
     fontSize: 13,
     marginTop: 4,
+  },
+  metaFooter: {
+    marginTop: 8,
   },
   chevron: {
     paddingRight: 12,
