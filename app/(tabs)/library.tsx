@@ -374,17 +374,6 @@ export default function LibraryScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <View pointerEvents="none" style={styles.backdrop}>
-        <View
-          style={[styles.backdropGlow, { backgroundColor: colors.tint + '10' }]}
-        />
-        <View
-          style={[
-            styles.backdropGlowSecondary,
-            { backgroundColor: colorScheme === 'light' ? '#F6F7F9' : '#1F2937' },
-          ]}
-        />
-      </View>
 
       <FlatList
         data={filteredItems}
@@ -578,19 +567,12 @@ export default function LibraryScreen() {
                     ]}
                   />
                   <View style={styles.itemContent}>
-                    <View style={styles.itemTopRow}>
-                      <Text
-                        style={[itemTextStyle, { color: colors.text }]}
-                        numberOfLines={2}
-                      >
-                        {item.content}
-                      </Text>
-                      <Ionicons
-                        name="arrow-forward"
-                        size={16}
-                        color={colors.textTertiary}
-                      />
-                    </View>
+                    <Text
+                      style={[itemTextStyle, { color: colors.text }]}
+                      numberOfLines={2}
+                    >
+                      {item.content}
+                    </Text>
 
                     <View style={styles.itemMetaRow}>
                       <Text

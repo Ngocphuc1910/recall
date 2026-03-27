@@ -1,7 +1,7 @@
 import React from 'react';
 import {
+  Animated,
   Modal,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -23,6 +23,38 @@ import {
   getPriorityDefinition,
 } from '@/lib/types';
 
+function SkeletonBone({
+  width,
+  height,
+  borderRadius = 8,
+  style,
+  shimmerOpacity,
+}: {
+  width: number | string;
+  height: number;
+  borderRadius?: number;
+  style?: any;
+  shimmerOpacity: Animated.Value;
+}) {
+  const colorScheme = useColorScheme() ?? 'light';
+  const colors = Colors[colorScheme];
+
+  return (
+    <Animated.View
+      style={[
+        {
+          width: width as any,
+          height,
+          borderRadius,
+          backgroundColor: colors.border,
+          opacity: shimmerOpacity,
+        },
+        style,
+      ]}
+    />
+  );
+}
+
 export default function ItemDetailScreen() {
   const { id, itemIds, sourceView } = useLocalSearchParams<{
     id: string;
@@ -33,9 +65,37 @@ export default function ItemDetailScreen() {
   const colors = Colors[colorScheme];
   const router = useRouter();
   const { width } = useWindowDimensions();
-  const isWeb = Platform.OS === 'web';
   const [showDetailsSheet, setShowDetailsSheet] = React.useState(false);
   const [priorityMenuOpen, setPriorityMenuOpen] = React.useState(false);
+  const [loading, setLoading] = React.useState(false);
+  const shimmerOpacity = React.useRef(new Animated.Value(0.3)).current;
+
+  React.useEffect(() => {
+    if (!loading) return;
+    const anim = Animated.loop(
+      Animated.sequence([
+        Animated.timing(shimmerOpacity, {
+          toValue: 1,
+          duration: 600,
+          useNativeDriver: true,
+        }),
+        Animated.timing(shimmerOpacity, {
+          toValue: 0.3,
+          duration: 600,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    anim.start();
+    return () => anim.stop();
+  }, [loading, shimmerOpacity]);
+
+  // Show skeleton briefly on item change
+  React.useEffect(() => {
+    setLoading(true);
+    const timeout = setTimeout(() => setLoading(false), 350);
+    return () => clearTimeout(timeout);
+  }, [id]);
 
   const item = useStore((s) => s.getItemById(id));
   const items = useStore((s) => s.items);
@@ -190,30 +250,32 @@ export default function ItemDetailScreen() {
     ? styles.columnFullWidth
     : styles.sideColumn;
 
-  const renderQueueModeButton = () => (
-    <TouchableOpacity
-      onPress={toggleReviewQueueMode}
-      activeOpacity={0.82}
-      accessibilityRole="button"
-      accessibilityLabel={
-        reviewQueueMode === 'random'
-          ? 'Switch to in-order next card mode'
-          : 'Switch to random next card mode'
-      }
-      style={styles.queueModeButton}
-    >
-      <Ionicons
-        name={
-          reviewQueueMode === 'random'
-            ? 'shuffle'
-            : 'swap-horizontal-outline'
-        }
-        size={18}
-        color={
-          reviewQueueMode === 'random' ? colors.tint : colors.textSecondary
-        }
-      />
-    </TouchableOpacity>
+  const renderSkeleton = () => (
+    <View style={styles.focusShell}>
+      <View style={styles.focusScroll}>
+        <SkeletonBone width="100%" height={36} borderRadius={6} shimmerOpacity={shimmerOpacity} />
+        <SkeletonBone width="90%" height={36} borderRadius={6} shimmerOpacity={shimmerOpacity} style={{ marginTop: 10 }} />
+        <SkeletonBone width="75%" height={36} borderRadius={6} shimmerOpacity={shimmerOpacity} style={{ marginTop: 10 }} />
+        <SkeletonBone width="40%" height={20} borderRadius={6} shimmerOpacity={shimmerOpacity} style={{ marginTop: 20 }} />
+        <View style={[styles.heroTopRow, { marginTop: 20 }]}>
+          <View style={[styles.badgeRow, { gap: 8 }]}>
+            <SkeletonBone width={80} height={28} borderRadius={999} shimmerOpacity={shimmerOpacity} />
+            <SkeletonBone width={70} height={28} borderRadius={999} shimmerOpacity={shimmerOpacity} />
+          </View>
+        </View>
+      </View>
+      <View
+        style={[
+          styles.focusActionBar,
+          {
+            backgroundColor: colors.background,
+            borderTopColor: colors.borderLight,
+          },
+        ]}
+      >
+        {renderReviewActions()}
+      </View>
+    </View>
   );
 
   const renderReviewActions = () => (
@@ -267,8 +329,6 @@ export default function ItemDetailScreen() {
           priorityLabel={item.priorityLabel}
         />
       </View>
-
-      {renderQueueModeButton()}
     </View>
   );
 
@@ -279,8 +339,6 @@ export default function ItemDetailScreen() {
         contentContainerStyle={styles.focusScrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {renderHeroTopRow()}
-
         <Text style={[focusTextStyle, { color: colors.text }]}>
           {item.content}
         </Text>
@@ -288,6 +346,8 @@ export default function ItemDetailScreen() {
         <Text style={[styles.sourceTextFocus, { color: colors.textSecondary }]}>
           {item.source || 'Unknown source'}
         </Text>
+
+        {renderHeroTopRow()}
 
         {item.detail ? (
           <View
@@ -324,7 +384,7 @@ export default function ItemDetailScreen() {
   );
 
   const renderDetailsSheet = () => (
-    <View style={styles.sheetOverlay}>
+    <View style={[styles.sheetOverlay, { backgroundColor: 'rgba(15, 23, 42, 0.34)' }]}>
       <Pressable style={styles.sheetBackdrop} onPress={closeDetailsSheet} />
       <View
         style={[
@@ -343,36 +403,36 @@ export default function ItemDetailScreen() {
           ]}
         />
 
-        <View style={styles.sheetHeader}>
-          <View>
-            <Text style={[styles.sheetTitle, { color: colors.text }]}>
-              Item details
-            </Text>
-            <Text
-              style={[styles.sheetSubtitle, { color: colors.textSecondary }]}
-            >
-              Review the metadata, schedule, and controls for this item.
-            </Text>
-          </View>
-
-          <TouchableOpacity
-            onPress={closeDetailsSheet}
-            activeOpacity={0.8}
-            style={styles.sheetCloseButton}
-          >
-            <Ionicons
-              name="close-outline"
-              size={20}
-              color={colors.textSecondary}
-            />
-          </TouchableOpacity>
-        </View>
-
         <ScrollView
           style={styles.sheetScroll}
           contentContainerStyle={styles.sheetScrollContent}
           showsVerticalScrollIndicator={false}
         >
+          <View style={styles.sheetHeader}>
+            <View>
+              <Text style={[styles.sheetTitle, { color: colors.text }]}>
+                Item details
+              </Text>
+              <Text
+                style={[styles.sheetSubtitle, { color: colors.textSecondary }]}
+              >
+                Review the metadata, schedule, and controls for this item.
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              onPress={closeDetailsSheet}
+              activeOpacity={0.8}
+              style={styles.sheetCloseButton}
+            >
+              <Ionicons
+                name="close-outline"
+                size={20}
+                color={colors.textSecondary}
+              />
+            </TouchableOpacity>
+          </View>
+
           <View style={styles.twoColumnLayout}>
             <View style={sideColumnStyle}>
               <View
@@ -616,7 +676,17 @@ export default function ItemDetailScreen() {
               </View>
             </View>
           </View>
+        </ScrollView>
 
+        <View
+          style={[
+            styles.sheetFooter,
+            {
+              backgroundColor: colors.background,
+              borderTopColor: colors.borderLight,
+            },
+          ]}
+        >
           <TouchableOpacity
             onPress={handleDelete}
             style={[
@@ -637,7 +707,7 @@ export default function ItemDetailScreen() {
               Delete Item
             </Text>
           </TouchableOpacity>
-        </ScrollView>
+        </View>
       </View>
     </View>
   );
@@ -647,38 +717,58 @@ export default function ItemDetailScreen() {
       <Stack.Screen
         options={{
           headerRight: () => (
-            <TouchableOpacity
-              onPress={() => setShowDetailsSheet(true)}
-              hitSlop={10}
-              activeOpacity={0.7}
-              style={styles.headerAction}
-            >
-              <Ionicons
-                name="information-circle-outline"
-                size={18}
-                color={colors.textSecondary}
-              />
-            </TouchableOpacity>
+            <View style={styles.headerRightRow}>
+              <TouchableOpacity
+                onPress={toggleReviewQueueMode}
+                hitSlop={10}
+                activeOpacity={0.7}
+                style={styles.headerAction}
+                accessibilityRole="button"
+                accessibilityLabel={
+                  reviewQueueMode === 'random'
+                    ? 'Switch to in-order next card mode'
+                    : 'Switch to random next card mode'
+                }
+              >
+                <Ionicons
+                  name={
+                    reviewQueueMode === 'random'
+                      ? 'shuffle'
+                      : 'swap-horizontal-outline'
+                  }
+                  size={18}
+                  color={
+                    reviewQueueMode === 'random' ? colors.tint : colors.textSecondary
+                  }
+                />
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => setShowDetailsSheet(true)}
+                hitSlop={10}
+                activeOpacity={0.7}
+                style={styles.headerAction}
+              >
+                <Ionicons
+                  name="information-circle-outline"
+                  size={18}
+                  color={colors.textSecondary}
+                />
+              </TouchableOpacity>
+            </View>
           ),
         }}
       />
 
-      {renderFocusReview()}
+      {loading ? renderSkeleton() : renderFocusReview()}
 
-      {isWeb ? (
-        showDetailsSheet ? (
-          <View style={styles.webModalRoot}>{renderDetailsSheet()}</View>
-        ) : null
-      ) : (
-        <Modal
-          visible={showDetailsSheet}
-          animationType="fade"
-          transparent
-          onRequestClose={closeDetailsSheet}
-        >
-          {renderDetailsSheet()}
-        </Modal>
-      )}
+      <Modal
+        visible={showDetailsSheet}
+        animationType="fade"
+        transparent
+        onRequestClose={closeDetailsSheet}
+      >
+        {renderDetailsSheet()}
+      </Modal>
     </View>
   );
 }
@@ -709,16 +799,17 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingBottom: 80,
   },
-  webModalRoot: {
-    ...StyleSheet.absoluteFillObject,
-    zIndex: 20,
-  },
   page: {
     width: '100%',
     maxWidth: 1120,
     alignSelf: 'center',
     paddingHorizontal: 18,
     paddingTop: 16,
+  },
+  headerRightRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
   headerAction: {
     width: 34,
@@ -754,15 +845,15 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   sheetBackdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(15, 23, 42, 0.34)',
+    flex: 1,
   },
   sheetCard: {
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     borderWidth: StyleSheet.hairlineWidth,
     borderBottomWidth: 0,
-    maxHeight: '82%',
+    maxHeight: '74%',
+    overflow: 'hidden',
     shadowOffset: { width: 0, height: -10 },
     shadowOpacity: 0.18,
     shadowRadius: 30,
@@ -782,6 +873,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     gap: 16,
     paddingHorizontal: 18,
+    paddingTop: 2,
     paddingBottom: 14,
   },
   sheetTitle: {
@@ -806,7 +898,13 @@ const styles = StyleSheet.create({
   },
   sheetScrollContent: {
     paddingHorizontal: 18,
-    paddingBottom: 28,
+    paddingBottom: 18,
+  },
+  sheetFooter: {
+    paddingHorizontal: 18,
+    paddingTop: 10,
+    paddingBottom: 18,
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
   heroPanel: {
     borderRadius: 26,
@@ -822,20 +920,13 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     justifyContent: 'space-between',
     gap: 12,
-    marginBottom: 14,
+    marginTop: 14,
   },
   badgeRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     flex: 1,
     gap: 8,
-  },
-  queueModeButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   categoryBadge: {
     flexDirection: 'row',
@@ -863,16 +954,16 @@ const styles = StyleSheet.create({
     letterSpacing: -0.35,
   },
   contentTextFocus: {
-    fontSize: 38,
-    lineHeight: 48,
+    fontSize: 30,
+    lineHeight: 40,
     fontWeight: '800',
-    letterSpacing: -1,
+    letterSpacing: -0.8,
   },
   contentTextFocusCompact: {
-    fontSize: 30,
-    lineHeight: 39,
+    fontSize: 23,
+    lineHeight: 32,
     fontWeight: '800',
-    letterSpacing: -0.6,
+    letterSpacing: -0.4,
   },
   sourceText: {
     marginTop: 10,

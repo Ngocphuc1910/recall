@@ -158,7 +158,7 @@ const styles = StyleSheet.create({
     zIndex: 100,
   },
   toastViewportTop: {
-    top: 18,
+    bottom: 90,
   },
   toastViewportBottom: {
     bottom: 28,

@@ -37,6 +37,8 @@ export default function TodayScreen() {
   const markRecalled = useStore((s) => s.markRecalled);
 
   const [showAddModal, setShowAddModal] = useState(false);
+  const [filterMode, setFilterMode] = useState<'today' | 'week' | 'month' | 'pastdue'>('today');
+  const [showFilterMenu, setShowFilterMenu] = useState(false);
   const [content, setContent] = useState('');
   const [detail, setDetail] = useState('');
   const [source, setSource] = useState('');
@@ -50,14 +52,35 @@ export default function TodayScreen() {
     }
   }, [categories, categoryId]);
 
-  const todayItems = useMemo(() => {
+  const filteredItems = useMemo(() => {
     const now = new Date();
-    now.setHours(23, 59, 59, 999);
-    const endOfToday = now.getTime();
-    return items.filter(
-      (item) => item.status === 'active' && item.nextReviewDate <= endOfToday
-    );
-  }, [items]);
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999).getTime();
+    const DAY = 24 * 60 * 60 * 1000;
+
+    return items.filter((item) => {
+      if (item.status !== 'active') return false;
+      switch (filterMode) {
+        case 'today':
+          return item.nextReviewDate <= endOfToday;
+        case 'week':
+          return item.nextReviewDate <= endOfToday + 6 * DAY;
+        case 'month':
+          return item.nextReviewDate <= endOfToday + 29 * DAY;
+        case 'pastdue':
+          return item.nextReviewDate < startOfToday;
+        default:
+          return item.nextReviewDate <= endOfToday;
+      }
+    });
+  }, [items, filterMode]);
+
+  const filterTitles: Record<string, string> = {
+    today: 'Today',
+    week: 'This Week',
+    month: 'This Month',
+    pastdue: 'Past Due',
+  };
 
   const canSave = content.trim().length > 0;
 
@@ -235,7 +258,14 @@ export default function TodayScreen() {
       <KeyboardAvoidingView
         style={styles.modalKeyboard}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={0}
       >
+        <View
+          style={[
+            styles.sheetHandle,
+            { backgroundColor: colors.textTertiary + '40' },
+          ]}
+        />
         {renderAddFormCard()}
       </KeyboardAvoidingView>
     </View>
@@ -245,35 +275,121 @@ export default function TodayScreen() {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={styles.header}>
         <View>
-          <Text style={[styles.title, { color: colors.text }]}>Today</Text>
+          <Text style={[styles.title, { color: colors.text }]}>
+            {filterTitles[filterMode]}
+          </Text>
           <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-            {todayItems.length === 0
-              ? 'All caught up!'
-              : `${todayItems.length} item${todayItems.length !== 1 ? 's' : ''} to recall`}
+            {filteredItems.length === 0
+              ? filterMode === 'today'
+                ? 'All caught up!'
+                : filterMode === 'pastdue'
+                ? 'Nothing past due!'
+                : 'No items in this range'
+              : `${filteredItems.length} item${filteredItems.length !== 1 ? 's' : ''} to recall`}
           </Text>
         </View>
         <TouchableOpacity
-          onPress={openAddModal}
+          onPress={() => setShowFilterMenu(!showFilterMenu)}
           hitSlop={10}
           style={[
-            styles.addButton,
-            { backgroundColor: colors.tint, shadowColor: colors.tint },
+            styles.filterButton,
+            {
+              backgroundColor: filterMode !== 'today' ? colors.tint + '15' : colors.surface,
+              borderColor: filterMode !== 'today' ? colors.tint + '30' : colors.border,
+            },
           ]}
           activeOpacity={0.8}
         >
-          <Ionicons name="add" size={24} color="#fff" />
+          <Ionicons
+            name="options-outline"
+            size={18}
+            color={filterMode !== 'today' ? colors.tint : colors.textSecondary}
+          />
         </TouchableOpacity>
       </View>
 
-      {todayItems.length === 0 ? (
+      {showFilterMenu && (
+        <>
+          <Pressable
+            style={styles.filterBackdrop}
+            onPress={() => setShowFilterMenu(false)}
+          />
+          <View
+            style={[
+              styles.filterMenu,
+              {
+                backgroundColor: colors.surface,
+                borderColor: colors.border,
+                shadowColor: colors.shadow,
+              },
+            ]}
+          >
+            {([
+              { key: 'today' as const, label: 'Today', icon: 'today-outline' as const },
+              { key: 'week' as const, label: 'This Week', icon: 'calendar-outline' as const },
+              { key: 'month' as const, label: 'This Month', icon: 'calendar-number-outline' as const },
+              { key: 'pastdue' as const, label: 'Past Due', icon: 'alert-circle-outline' as const },
+            ]).map((option) => {
+              const active = filterMode === option.key;
+              return (
+                <TouchableOpacity
+                  key={option.key}
+                  onPress={() => {
+                    setFilterMode(option.key);
+                    setShowFilterMenu(false);
+                  }}
+                  style={[
+                    styles.filterOption,
+                    active && { backgroundColor: colors.tint + '12' },
+                  ]}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons
+                    name={option.icon}
+                    size={18}
+                    color={active ? colors.tint : colors.textSecondary}
+                  />
+                  <Text
+                    style={[
+                      styles.filterOptionText,
+                      { color: active ? colors.tint : colors.text },
+                      active && { fontWeight: '700' as const },
+                    ]}
+                  >
+                    {option.label}
+                  </Text>
+                  {active && (
+                    <Ionicons name="checkmark" size={16} color={colors.tint} />
+                  )}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </>
+      )}
+
+      {filteredItems.length === 0 ? (
         <EmptyState
           icon="checkmark-done-outline"
-          title="You're all done!"
-          subtitle="No items to recall today. Tap + to add new items and start building your memory."
+          iconColor={colors.success}
+          title={
+            filterMode === 'today'
+              ? "You're all done!"
+              : filterMode === 'pastdue'
+              ? 'Nothing past due!'
+              : 'All clear!'
+          }
+          subtitle={
+            filterMode === 'today'
+              ? 'No items to recall today. Tap + to add new items and start building your memory.'
+              : filterMode === 'pastdue'
+              ? 'All your items are up to date. Great job!'
+              : `No items due ${filterMode === 'week' ? 'this week' : 'this month'}. Check back later!`
+          }
         />
       ) : (
         <FlatList
-          data={todayItems}
+          data={filteredItems}
           keyExtractor={(item) => item.id}
           onScroll={tabBarScroll.onScroll}
           scrollEventThrottle={tabBarScroll.scrollEventThrottle}
@@ -286,7 +402,7 @@ export default function TodayScreen() {
                   params: {
                     id: item.id,
                     sourceView: 'today',
-                    itemIds: todayItems.map((entry) => entry.id).join(','),
+                    itemIds: filteredItems.map((entry) => entry.id).join(','),
                   },
                 })
               }
@@ -298,6 +414,17 @@ export default function TodayScreen() {
         />
       )}
 
+      <TouchableOpacity
+        onPress={openAddModal}
+        style={[
+          styles.fab,
+          { backgroundColor: colors.tint, shadowColor: colors.tint },
+        ]}
+        activeOpacity={0.8}
+      >
+        <Ionicons name="add" size={28} color="#fff" />
+      </TouchableOpacity>
+
       {isWeb ? (
         showAddModal ? (
           <View style={styles.webModalRoot}>{renderAddOverlay()}</View>
@@ -305,7 +432,7 @@ export default function TodayScreen() {
       ) : (
         <Modal
           visible={showAddModal}
-          animationType="fade"
+          animationType="slide"
           transparent
           onRequestClose={closeAddModal}
         >
@@ -338,17 +465,58 @@ const styles = StyleSheet.create({
     fontSize: 15,
     marginTop: 2,
   },
-  addButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+  filterButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 2,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  filterBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 9,
+  },
+  filterMenu: {
+    position: 'absolute',
+    top: 76,
+    right: 20,
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    overflow: 'hidden',
+    zIndex: 10,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 20,
+    elevation: 8,
+    minWidth: 190,
+  },
+  filterOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 13,
+  },
+  filterOptionText: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  fab: {
+    position: 'absolute',
+    bottom: 24,
+    right: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
-    elevation: 4,
+    elevation: 6,
+    zIndex: 5,
   },
   list: {
     paddingTop: 8,
@@ -356,16 +524,22 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    justifyContent: 'center',
-    padding: 16,
+    justifyContent: 'flex-end',
   },
   modalBackdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.35)',
+    backgroundColor: 'rgba(15, 23, 42, 0.34)',
   },
   modalKeyboard: {
     width: '100%',
-    alignItems: 'center',
+    maxHeight: '92%',
+  },
+  sheetHandle: {
+    width: 44,
+    height: 5,
+    borderRadius: 999,
+    alignSelf: 'center',
+    marginBottom: 8,
   },
   webModalRoot: {
     ...StyleSheet.absoluteFillObject,
@@ -373,23 +547,29 @@ const styles = StyleSheet.create({
   },
   modalCard: {
     width: '100%',
-    maxWidth: 680,
-    maxHeight: '92%',
-    borderRadius: 16,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
     borderWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: 0,
     overflow: 'hidden',
+    shadowOffset: { width: 0, height: -10 },
+    shadowOpacity: 0.18,
+    shadowRadius: 30,
+    elevation: 10,
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   modalTitle: {
-    fontSize: 18,
-    fontWeight: '700',
+    fontSize: 22,
+    fontWeight: '800',
+    letterSpacing: -0.4,
   },
   closeButton: {
     width: 32,
@@ -399,8 +579,8 @@ const styles = StyleSheet.create({
     borderRadius: 16,
   },
   modalContent: {
-    padding: 16,
-    paddingBottom: 24,
+    padding: 20,
+    paddingBottom: 32,
   },
   field: { marginBottom: 20 },
   label: {
