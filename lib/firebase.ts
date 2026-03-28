@@ -301,6 +301,17 @@ function shouldUseGoogleRedirectAuth() {
     typeof navigator.maxTouchPoints === 'number' &&
     navigator.platform === 'MacIntel' &&
     navigator.maxTouchPoints > 1;
+  const isIOSWebKit =
+    /iPhone|iPad|iPod/i.test(userAgent) ||
+    touchMac;
+  const isCriOS = /CriOS/i.test(userAgent);
+  const isFxiOS = /FxiOS/i.test(userAgent);
+  const isEdgiOS = /EdgiOS/i.test(userAgent);
+  const isIOSSafari = isIOSWebKit && !isCriOS && !isFxiOS && !isEdgiOS;
+
+  if (isIOSSafari) {
+    return false;
+  }
 
   return /Android|webOS|iPhone|iPad|iPod|Mobile/i.test(userAgent) || touchMac;
 }

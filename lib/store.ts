@@ -116,6 +116,10 @@ interface RecallStore extends PersistedRecallState {
     id: string,
     priorityCode: PriorityCode
   ) => Promise<void>;
+  updateStagedHighlightFields: (
+    id: string,
+    fields: { content: string; detail: string; source: string; categoryId: string; priorityCode: PriorityCode }
+  ) => Promise<void>;
   approveStagedHighlight: (id: string) => Promise<void>;
   rejectStagedHighlight: (id: string) => Promise<void>;
   approveAllPendingStagedHighlights: () => Promise<void>;
@@ -308,7 +312,7 @@ export const useStore = create<RecallStore>()(
           const resolvedCategoryId = resolveImportCategoryId(row.categoryId, state.categories);
           const now = Date.now();
 
-          highlightsToStage.push({
+          const highlight: StagedHighlight = {
             id: '',
             content: row.content,
             detail: row.detail ?? '',
@@ -320,16 +324,20 @@ export const useStore = create<RecallStore>()(
             dedupeKey,
             approvalStatus: 'pending',
             importStatus: 'staged',
-            externalId: row.externalId,
-            sourceAssetId: parsed.source?.assetId,
-            sourceProvider: parsed.source?.provider,
-            locationCfi: row.meta?.locationCfi,
-            highlightedAt: row.meta?.highlightedAt,
-            highlightStyle: row.meta?.style,
             syncedAt: now,
             createdAt: parseCreatedAtFromHighlightedAt(row.meta?.highlightedAt) ?? now,
             updatedAt: now,
-          });
+          };
+
+          // Only set optional fields if they have a value — Firestore rejects undefined
+          if (row.externalId) highlight.externalId = row.externalId;
+          if (parsed.source?.assetId) highlight.sourceAssetId = parsed.source.assetId;
+          if (parsed.source?.provider) highlight.sourceProvider = parsed.source.provider;
+          if (row.meta?.locationCfi) highlight.locationCfi = row.meta.locationCfi;
+          if (row.meta?.highlightedAt) highlight.highlightedAt = row.meta.highlightedAt;
+          if (row.meta?.style !== undefined) highlight.highlightStyle = row.meta.style;
+
+          highlightsToStage.push(highlight);
         });
 
         if (skippedDuplicates > 0) {
@@ -413,6 +421,22 @@ export const useStore = create<RecallStore>()(
         const priority = getPriorityDefinition(priorityCode);
 
         await updateDoc(getAccountStagedHighlightRef(session.accountId, id), {
+          priorityCode: priority.code,
+          priorityLabel: priority.label,
+          updatedAt: Date.now(),
+        });
+      },
+
+      updateStagedHighlightFields: async (id, fields) => {
+        const session = await ensureCurrentSession(set);
+        const priority = getPriorityDefinition(fields.priorityCode);
+
+        await updateDoc(getAccountStagedHighlightRef(session.accountId, id), {
+          content: fields.content,
+          detail: fields.detail,
+          source: fields.source,
+          categoryId: fields.categoryId,
+          categoryStatus: 'chosen',
           priorityCode: priority.code,
           priorityLabel: priority.label,
           updatedAt: Date.now(),

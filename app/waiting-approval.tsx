@@ -1,10 +1,14 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   Alert,
+  KeyboardAvoidingView,
+  Modal,
   Platform,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
   useColorScheme,
@@ -16,7 +20,7 @@ import EmptyState from '@/components/EmptyState';
 import PriorityBadge from '@/components/PriorityBadge';
 import PriorityPicker from '@/components/PriorityPicker';
 import { useStore } from '@/lib/store';
-import { StagedHighlight } from '@/lib/types';
+import { PriorityCode, StagedHighlight } from '@/lib/types';
 
 export default function WaitingApprovalScreen() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -26,37 +30,31 @@ export default function WaitingApprovalScreen() {
   const stagedHighlights = useStore((s) => s.stagedHighlights);
   const syncRequests = useStore((s) => s.syncRequests);
   const requestAppleBooksSync = useStore((s) => s.requestAppleBooksSync);
-  const updateStagedHighlightCategory = useStore(
-    (s) => s.updateStagedHighlightCategory
-  );
-  const updateStagedHighlightPriority = useStore(
-    (s) => s.updateStagedHighlightPriority
-  );
+  const updateStagedHighlightFields = useStore((s) => s.updateStagedHighlightFields);
   const approveStagedHighlight = useStore((s) => s.approveStagedHighlight);
   const rejectStagedHighlight = useStore((s) => s.rejectStagedHighlight);
-  const approveAllPendingStagedHighlights = useStore(
-    (s) => s.approveAllPendingStagedHighlights
-  );
-  const rejectAllPendingStagedHighlights = useStore(
-    (s) => s.rejectAllPendingStagedHighlights
-  );
-  const setPendingHighlightsCategory = useStore(
-    (s) => s.setPendingHighlightsCategory
-  );
+  const approveAllPendingStagedHighlights = useStore((s) => s.approveAllPendingStagedHighlights);
+  const rejectAllPendingStagedHighlights = useStore((s) => s.rejectAllPendingStagedHighlights);
+  const setPendingHighlightsCategory = useStore((s) => s.setPendingHighlightsCategory);
+
+  const [editingHighlight, setEditingHighlight] = useState<StagedHighlight | null>(null);
+  const [editContent, setEditContent] = useState('');
+  const [editDetail, setEditDetail] = useState('');
+  const [editSource, setEditSource] = useState('');
+  const [editCategoryId, setEditCategoryId] = useState('');
+  const [editPriorityCode, setEditPriorityCode] = useState<PriorityCode>(2);
+  const [saving, setSaving] = useState(false);
 
   const pendingHighlights = useMemo(
-    () =>
-      stagedHighlights.filter((highlight) => highlight.approvalStatus === 'pending'),
+    () => stagedHighlights.filter((h) => h.approvalStatus === 'pending'),
     [stagedHighlights]
   );
   const approvedHighlights = useMemo(
-    () =>
-      stagedHighlights.filter((highlight) => highlight.approvalStatus === 'approved'),
+    () => stagedHighlights.filter((h) => h.approvalStatus === 'approved'),
     [stagedHighlights]
   );
   const rejectedHighlights = useMemo(
-    () =>
-      stagedHighlights.filter((highlight) => highlight.approvalStatus === 'rejected'),
+    () => stagedHighlights.filter((h) => h.approvalStatus === 'rejected'),
     [stagedHighlights]
   );
 
@@ -64,231 +62,347 @@ export default function WaitingApprovalScreen() {
   const syncInFlight =
     latestRequest?.source === 'apple_books' &&
     (latestRequest.status === 'pending' || latestRequest.status === 'running');
-  const needsBooksDefault = pendingHighlights.some(
-    (highlight) => highlight.categoryId !== 'books'
-  );
+  const needsBooksDefault = pendingHighlights.some((h) => h.categoryId !== 'books');
   const readyToApproveAll = pendingHighlights.filter(
-    (highlight) =>
-      !!highlight.categoryId && highlight.categoryStatus === 'chosen'
+    (h) => !!h.categoryId && h.categoryStatus === 'chosen'
   ).length;
+
+  const openEdit = (highlight: StagedHighlight) => {
+    setEditingHighlight(highlight);
+    setEditContent(highlight.content);
+    setEditDetail(highlight.detail ?? '');
+    setEditSource(highlight.source ?? '');
+    setEditCategoryId(highlight.categoryId ?? categories[0]?.id ?? '');
+    setEditPriorityCode(highlight.priorityCode);
+  };
+
+  const closeEdit = () => {
+    setEditingHighlight(null);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingHighlight || !editContent.trim()) return;
+    setSaving(true);
+    try {
+      await updateStagedHighlightFields(editingHighlight.id, {
+        content: editContent.trim(),
+        detail: editDetail.trim(),
+        source: editSource.trim(),
+        categoryId: editCategoryId,
+        priorityCode: editPriorityCode,
+      });
+      closeEdit();
+    } catch (e) {
+      notify(getErrorMessage(e), true);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const handleSyncRequest = async () => {
     try {
       await requestAppleBooksSync();
-      notify('Apple Books sync requested. Your Mac agent can pick it up now.');
-    } catch (error) {
-      notify(getErrorMessage(error), true);
-    }
-  };
-
-  const handleSetAllToBooks = async () => {
-    try {
-      await setPendingHighlightsCategory('books');
-    } catch (error) {
-      notify(getErrorMessage(error), true);
+      notify('Apple Books sync requested.');
+    } catch (e) {
+      notify(getErrorMessage(e), true);
     }
   };
 
   const handleApproveAll = async () => {
     try {
       await approveAllPendingStagedHighlights();
-      notify('Approved all pending highlights that already had a category.');
-    } catch (error) {
-      notify(getErrorMessage(error), true);
+    } catch (e) {
+      notify(getErrorMessage(e), true);
     }
   };
 
   const handleRejectAll = async () => {
     try {
       await rejectAllPendingStagedHighlights();
-      notify('Rejected all pending highlights.');
-    } catch (error) {
-      notify(getErrorMessage(error), true);
+    } catch (e) {
+      notify(getErrorMessage(e), true);
     }
   };
 
   const handleApprove = async (highlight: StagedHighlight) => {
     try {
       await approveStagedHighlight(highlight.id);
-    } catch (error) {
-      notify(getErrorMessage(error), true);
+    } catch (e) {
+      notify(getErrorMessage(e), true);
     }
   };
 
   const handleReject = async (highlight: StagedHighlight) => {
     try {
       await rejectStagedHighlight(highlight.id);
-    } catch (error) {
-      notify(getErrorMessage(error), true);
+    } catch (e) {
+      notify(getErrorMessage(e), true);
     }
   };
 
   return (
-    <ScrollView
-      style={[styles.container, { backgroundColor: colors.background }]}
-      contentContainerStyle={styles.content}
-    >
-      <Text style={[styles.title, { color: colors.text }]}>Waiting Approval</Text>
-      <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-        Review synced Apple Books highlights, confirm their category, and move them
-        into the recall cycle.
-      </Text>
-
-      <View
-        style={[
-          styles.card,
-          { backgroundColor: colors.surface, borderColor: colors.borderLight },
-        ]}
+    <>
+      <ScrollView
+        style={[styles.container, { backgroundColor: colors.background }]}
+        contentContainerStyle={styles.content}
       >
-        <View style={styles.syncHeader}>
-          <View>
-            <Text style={[styles.cardTitle, { color: colors.text }]}>
-              Apple Books Sync
-            </Text>
-            <Text style={[styles.metaText, { color: colors.textSecondary }]}>
-              {latestRequest
-                ? `Latest request: ${formatStatus(latestRequest.status)}`
-                : 'No sync request yet'}
-            </Text>
-          </View>
+        <View style={styles.pageHeader}>
+          <Text style={[styles.title, { color: colors.text }]}>Approval</Text>
           <TouchableOpacity
             onPress={handleSyncRequest}
             disabled={syncInFlight}
             style={[
               styles.syncButton,
-              {
-                backgroundColor: syncInFlight ? colors.tint + '40' : colors.tint,
-              },
+              { backgroundColor: syncInFlight ? colors.tint + '40' : colors.tint },
             ]}
             activeOpacity={0.8}
           >
-            <Ionicons name="sync-outline" size={18} color="#fff" />
+            <Ionicons name="sync-outline" size={16} color="#fff" />
             <Text style={styles.syncButtonText}>
-              {syncInFlight ? 'Syncing' : 'Sync Apple Books'}
+              {syncInFlight ? 'Syncing…' : 'Sync Books'}
             </Text>
           </TouchableOpacity>
         </View>
 
-        {latestRequest?.resultSummary ? (
-          <Text style={[styles.sectionNote, { color: colors.textTertiary }]}>
-            {latestRequest.resultSummary}
+        <View style={styles.sectionHeader}>
+          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>PENDING</Text>
+          <Text style={[styles.sectionCount, { color: colors.textTertiary }]}>
+            {pendingHighlights.length}
           </Text>
-        ) : null}
-        {latestRequest?.error ? (
-          <Text style={[styles.errorText, { color: colors.destructive }]}>
-            {latestRequest.error}
-          </Text>
-        ) : null}
-      </View>
+        </View>
 
-      <View style={styles.sectionHeader}>
-        <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
-          PENDING
-        </Text>
-        <Text style={[styles.sectionCount, { color: colors.textTertiary }]}>
-          {pendingHighlights.length}
-        </Text>
-      </View>
-
-      {pendingHighlights.length > 0 ? (
-        <>
-          <View style={styles.actionRow}>
-            <TouchableOpacity
-              onPress={handleSetAllToBooks}
-              disabled={!needsBooksDefault}
-              style={[
-                styles.secondaryButton,
-                {
-                  backgroundColor: colors.surface,
-                  borderColor: colors.border,
-                  opacity: needsBooksDefault ? 1 : 0.55,
-                },
-              ]}
-            >
-              <Text style={[styles.secondaryButtonText, { color: colors.text }]}>
-                Set All Visible To Books
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={handleApproveAll}
-              disabled={readyToApproveAll === 0}
-              style={[
-                styles.secondaryButton,
-                {
-                  backgroundColor: colors.success + '15',
-                  borderColor: colors.success,
-                  opacity: readyToApproveAll > 0 ? 1 : 0.55,
-                },
-              ]}
-            >
-              <Text
-                style={[styles.secondaryButtonText, { color: colors.success }]}
+        {pendingHighlights.length > 0 ? (
+          <>
+            <View style={styles.actionRow}>
+              <TouchableOpacity
+                onPress={() =>
+                  setPendingHighlightsCategory('books').catch((e) =>
+                    notify(getErrorMessage(e), true)
+                  )
+                }
+                disabled={!needsBooksDefault}
+                style={[
+                  styles.secondaryButton,
+                  {
+                    backgroundColor: colors.surface,
+                    borderColor: colors.border,
+                    opacity: needsBooksDefault ? 1 : 0.55,
+                  },
+                ]}
               >
-                Approve All Ready ({readyToApproveAll})
-              </Text>
-            </TouchableOpacity>
+                <Text style={[styles.secondaryButtonText, { color: colors.text }]}>
+                  Set All To Books
+                </Text>
+              </TouchableOpacity>
 
-            <TouchableOpacity
-              onPress={handleRejectAll}
-              disabled={pendingHighlights.length === 0}
+              <TouchableOpacity
+                onPress={handleApproveAll}
+                disabled={readyToApproveAll === 0}
+                style={[
+                  styles.secondaryButton,
+                  {
+                    backgroundColor: colors.success + '15',
+                    borderColor: colors.success,
+                    opacity: readyToApproveAll > 0 ? 1 : 0.55,
+                  },
+                ]}
+              >
+                <Text style={[styles.secondaryButtonText, { color: colors.success }]}>
+                  Approve All Ready ({readyToApproveAll})
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={handleRejectAll}
+                style={[
+                  styles.secondaryButton,
+                  {
+                    backgroundColor: colors.destructive + '12',
+                    borderColor: colors.destructive,
+                    opacity: pendingHighlights.length > 0 ? 1 : 0.55,
+                  },
+                ]}
+              >
+                <Text style={[styles.secondaryButtonText, { color: colors.destructive }]}>
+                  Reject All
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {pendingHighlights.map((highlight) => (
+              <ApprovalCard
+                key={highlight.id}
+                highlight={highlight}
+                colors={colors}
+                categories={categories}
+                onEdit={() => openEdit(highlight)}
+                onApprove={() => handleApprove(highlight)}
+                onReject={() => handleReject(highlight)}
+              />
+            ))}
+          </>
+        ) : (
+          <EmptyState
+            icon="hourglass-outline"
+            title="Nothing waiting"
+            subtitle="Request a sync from Apple Books or bulk import JSON, then approve highlights here."
+          />
+        )}
+
+        <HistorySection title="APPROVED" highlights={approvedHighlights} colors={colors} />
+        <HistorySection title="REJECTED" highlights={rejectedHighlights} colors={colors} />
+      </ScrollView>
+
+      {/* Edit bottom sheet */}
+      <Modal
+        visible={!!editingHighlight}
+        transparent
+        animationType="slide"
+        onRequestClose={closeEdit}
+      >
+        <View style={styles.modalOverlay}>
+          <Pressable style={styles.modalBackdrop} onPress={closeEdit} />
+          <KeyboardAvoidingView
+            style={styles.modalKeyboard}
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          >
+            <View
               style={[
-                styles.secondaryButton,
-                {
-                  backgroundColor: colors.destructive + '12',
-                  borderColor: colors.destructive,
-                  opacity: pendingHighlights.length > 0 ? 1 : 0.55,
-                },
+                styles.modalCard,
+                { backgroundColor: colors.background, borderColor: colors.border },
               ]}
             >
-              <Text
-                style={[styles.secondaryButtonText, { color: colors.destructive }]}
+              <View
+                style={[styles.sheetHandle, { backgroundColor: colors.textTertiary + '40' }]}
+              />
+              <View style={[styles.modalHeader, { borderBottomColor: colors.borderLight }]}>
+                <Text style={[styles.modalTitle, { color: colors.text }]}>Edit Item</Text>
+                <TouchableOpacity onPress={closeEdit} style={styles.closeButton}>
+                  <Ionicons name="close-outline" size={24} color={colors.textSecondary} />
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView
+                contentContainerStyle={styles.modalContent}
+                keyboardShouldPersistTaps="handled"
               >
-                Reject All
-              </Text>
-            </TouchableOpacity>
-          </View>
+                <View style={styles.field}>
+                  <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>CONTENT</Text>
+                  <TextInput
+                    style={[
+                      styles.input,
+                      styles.contentInput,
+                      {
+                        color: colors.text,
+                        backgroundColor: colors.surface,
+                        borderColor: colors.border,
+                      },
+                    ]}
+                    placeholder="What do you want to remember?"
+                    placeholderTextColor={colors.textTertiary}
+                    value={editContent}
+                    onChangeText={setEditContent}
+                    multiline
+                    textAlignVertical="top"
+                  />
+                </View>
 
-          {pendingHighlights.map((highlight) => (
-            <ApprovalCard
-              key={highlight.id}
-              highlight={highlight}
-              colors={colors}
-              categories={categories}
-              onSelectCategory={(categoryId) =>
-                updateStagedHighlightCategory(highlight.id, categoryId).catch((error) =>
-                  notify(getErrorMessage(error), true)
-                )
-              }
-              onSelectPriority={(priorityCode) =>
-                updateStagedHighlightPriority(highlight.id, priorityCode).catch((error) =>
-                  notify(getErrorMessage(error), true)
-                )
-              }
-              onApprove={() => handleApprove(highlight)}
-              onReject={() => handleReject(highlight)}
-            />
-          ))}
-        </>
-      ) : (
-        <EmptyState
-          icon="hourglass-outline"
-          title="Nothing waiting"
-          subtitle="Request a sync from Apple Books, then approve the incoming highlights here."
-        />
-      )}
+                <View style={styles.field}>
+                  <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>
+                    NOTES (OPTIONAL)
+                  </Text>
+                  <TextInput
+                    style={[
+                      styles.input,
+                      styles.detailInput,
+                      {
+                        color: colors.text,
+                        backgroundColor: colors.surface,
+                        borderColor: colors.border,
+                      },
+                    ]}
+                    placeholder="Add context or notes..."
+                    placeholderTextColor={colors.textTertiary}
+                    value={editDetail}
+                    onChangeText={setEditDetail}
+                    multiline
+                    textAlignVertical="top"
+                  />
+                </View>
 
-      <HistorySection
-        title="APPROVED"
-        highlights={approvedHighlights}
-        colors={colors}
-      />
-      <HistorySection
-        title="REJECTED"
-        highlights={rejectedHighlights}
-        colors={colors}
-      />
-    </ScrollView>
+                <View style={styles.field}>
+                  <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>
+                    SOURCE (OPTIONAL)
+                  </Text>
+                  <TextInput
+                    style={[
+                      styles.input,
+                      {
+                        color: colors.text,
+                        backgroundColor: colors.surface,
+                        borderColor: colors.border,
+                      },
+                    ]}
+                    placeholder="Book title, article, course..."
+                    placeholderTextColor={colors.textTertiary}
+                    value={editSource}
+                    onChangeText={setEditSource}
+                  />
+                </View>
+
+                <View style={styles.field}>
+                  <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>CATEGORY</Text>
+                  <CategoryPicker
+                    categories={categories}
+                    selectedCategoryId={editCategoryId}
+                    onSelect={setEditCategoryId}
+                  />
+                </View>
+
+                <View style={styles.field}>
+                  <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>PRIORITY</Text>
+                  <PriorityPicker
+                    selectedPriorityCode={editPriorityCode}
+                    onSelect={setEditPriorityCode}
+                  />
+                </View>
+
+                <View style={styles.modalActions}>
+                  <TouchableOpacity
+                    onPress={closeEdit}
+                    style={[
+                      styles.cancelButton,
+                      { borderColor: colors.border, backgroundColor: colors.surface },
+                    ]}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[styles.cancelButtonText, { color: colors.text }]}>Cancel</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    onPress={handleSaveEdit}
+                    disabled={!editContent.trim() || saving}
+                    style={[
+                      styles.saveButton,
+                      {
+                        backgroundColor:
+                          editContent.trim() && !saving
+                            ? colors.tint
+                            : colors.tint + '40',
+                      },
+                    ]}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="checkmark-circle-outline" size={20} color="#fff" />
+                    <Text style={styles.saveButtonText}>{saving ? 'Saving…' : 'Save'}</Text>
+                  </TouchableOpacity>
+                </View>
+              </ScrollView>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
+    </>
   );
 }
 
@@ -296,20 +410,19 @@ function ApprovalCard({
   highlight,
   colors,
   categories,
-  onSelectCategory,
-  onSelectPriority,
+  onEdit,
   onApprove,
   onReject,
 }: {
   highlight: StagedHighlight;
   colors: any;
   categories: ReturnType<typeof useStore.getState>['categories'];
-  onSelectCategory: (categoryId: string) => void;
-  onSelectPriority: (priorityCode: 1 | 2 | 3 | 4 | 5) => void;
+  onEdit: () => void;
   onApprove: () => void;
   onReject: () => void;
 }) {
   const isReady = !!highlight.categoryId && highlight.categoryStatus === 'chosen';
+  const category = categories.find((c) => c.id === highlight.categoryId);
 
   return (
     <View
@@ -319,63 +432,56 @@ function ApprovalCard({
         { backgroundColor: colors.surface, borderColor: colors.borderLight },
       ]}
     >
-      <View style={styles.highlightHeader}>
-        <View style={styles.sourceBlock}>
-          <Text style={[styles.highlightSource, { color: colors.text }]}>
-            {highlight.source || 'Apple Books'}
-          </Text>
-          <Text style={[styles.metaText, { color: colors.textSecondary }]}>
-            {formatHighlightDate(highlight.highlightedAt)} · Apple Books
-          </Text>
-          <View style={styles.inlineMetaRow}>
-            <PriorityBadge
-              priorityCode={highlight.priorityCode}
-              priorityLabel={highlight.priorityLabel}
-              compact
-            />
+      {/* Header row */}
+      <View style={styles.cardTopRow}>
+        <View style={styles.cardLeading}>
+          {category ? (
+            <View style={[styles.dot, { backgroundColor: category.color }]} />
+          ) : null}
+          <View style={styles.cardMeta}>
+            <Text style={[styles.highlightSource, { color: colors.text }]} numberOfLines={1}>
+              {highlight.source || 'Unknown source'}
+            </Text>
+            {highlight.highlightedAt ? (
+              <Text style={[styles.metaText, { color: colors.textSecondary }]}>
+                {formatHighlightDate(highlight.highlightedAt)}
+              </Text>
+            ) : null}
           </View>
         </View>
-        {!isReady ? (
-          <View
-            style={[
-              styles.warningBadge,
-              { backgroundColor: colors.warning + '18' },
-            ]}
-          >
-            <Text style={[styles.warningBadgeText, { color: colors.warning }]}>
-              Category required
-            </Text>
-          </View>
-        ) : null}
+        <TouchableOpacity onPress={onEdit} style={styles.editButton} activeOpacity={0.7}>
+          <Ionicons name="create-outline" size={20} color={colors.textTertiary} />
+        </TouchableOpacity>
       </View>
 
-      <Text style={[styles.highlightContent, { color: colors.text }]}>
+      {/* Content */}
+      <Text style={[styles.highlightContent, { color: colors.text }]} numberOfLines={3}>
         {highlight.content}
       </Text>
 
-      {highlight.detail ? (
-        <Text style={[styles.highlightDetail, { color: colors.textSecondary }]}>
-          {highlight.detail}
-        </Text>
-      ) : null}
+      {/* Pills row */}
+      <View style={styles.pillsRow}>
+        {category ? (
+          <View style={[styles.categoryPill, { backgroundColor: category.color + '15' }]}>
+            <Text style={[styles.categoryPillText, { color: category.color }]}>
+              {category.name}
+            </Text>
+          </View>
+        ) : (
+          <View style={[styles.categoryPill, { backgroundColor: colors.warning + '18' }]}>
+            <Text style={[styles.categoryPillText, { color: colors.warning }]}>
+              No category — tap edit
+            </Text>
+          </View>
+        )}
+        <PriorityBadge
+          priorityCode={highlight.priorityCode}
+          priorityLabel={highlight.priorityLabel}
+          compact
+        />
+      </View>
 
-      <Text style={[styles.label, { color: colors.textSecondary }]}>CATEGORY</Text>
-      <CategoryPicker
-        categories={categories}
-        selectedCategoryId={highlight.categoryId}
-        onSelect={onSelectCategory}
-        compact
-      />
-
-      <Text style={[styles.label, styles.inlineLabel, { color: colors.textSecondary }]}>
-        PRIORITY
-      </Text>
-      <PriorityPicker
-        selectedPriorityCode={highlight.priorityCode}
-        onSelect={onSelectPriority}
-        compact
-      />
-
+      {/* Actions */}
       <View style={styles.actionButtons}>
         <TouchableOpacity
           onPress={onReject}
@@ -385,9 +491,7 @@ function ApprovalCard({
           ]}
           activeOpacity={0.8}
         >
-          <Text style={[styles.outlineActionText, { color: colors.textSecondary }]}>
-            Reject
-          </Text>
+          <Text style={[styles.outlineActionText, { color: colors.textSecondary }]}>Reject</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -419,9 +523,7 @@ function HistorySection({
   return (
     <>
       <View style={styles.sectionHeader}>
-        <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
-          {title}
-        </Text>
+        <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>{title}</Text>
         <Text style={[styles.sectionCount, { color: colors.textTertiary }]}>
           {highlights.length}
         </Text>
@@ -442,29 +544,16 @@ function HistorySection({
             ]}
           >
             <View style={styles.historyHeader}>
-              <View style={styles.historyTitleBlock}>
-                <Text
-                  style={[styles.historySource, { color: colors.text }]}
-                  numberOfLines={1}
-                >
-                  {highlight.source || 'Apple Books'}
-                </Text>
-                <PriorityBadge
-                  priorityCode={highlight.priorityCode}
-                  priorityLabel={highlight.priorityLabel}
-                  compact
-                />
-              </View>
+              <Text style={[styles.historySource, { color: colors.text }]} numberOfLines={1}>
+                {highlight.source || 'Unknown source'}
+              </Text>
               <Text style={[styles.metaText, { color: colors.textTertiary }]}>
                 {highlight.importStatus === 'skipped_duplicate'
                   ? 'Duplicate'
                   : formatStatus(highlight.approvalStatus)}
               </Text>
             </View>
-            <Text
-              style={[styles.historyContent, { color: colors.textSecondary }]}
-              numberOfLines={3}
-            >
+            <Text style={[styles.historyContent, { color: colors.textSecondary }]} numberOfLines={2}>
               {highlight.content}
             </Text>
           </View>
@@ -479,26 +568,17 @@ function formatStatus(status: string) {
 }
 
 function formatHighlightDate(value?: string) {
-  if (!value) return 'Unknown date';
+  if (!value) return '';
   const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return 'Unknown date';
-  return parsed.toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
+  if (Number.isNaN(parsed.getTime())) return '';
+  return parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 function notify(message: string, isError = false) {
   if (Platform.OS === 'web') {
-    if (isError) {
-      alert(message);
-      return;
-    }
     alert(message);
     return;
   }
-
   Alert.alert(isError ? 'Error' : 'Done', message);
 }
 
@@ -511,51 +591,41 @@ function getErrorMessage(error: unknown) {
   ) {
     return error.message;
   }
-
   return 'Something went wrong.';
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
   content: { padding: 20, paddingBottom: 48 },
-  title: {
-    fontSize: 34,
-    fontWeight: '700',
-    letterSpacing: 0.37,
+  pageHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 20,
   },
-  subtitle: {
-    fontSize: 15,
-    lineHeight: 22,
-    marginTop: 4,
-    marginBottom: 16,
-  },
+  title: { fontSize: 34, fontWeight: '700', letterSpacing: 0.37 },
+
   card: {
-    borderRadius: 16,
+    borderRadius: 20,
     borderWidth: StyleSheet.hairlineWidth,
     padding: 16,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 2,
   },
-  cardTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  syncHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
+  cardTitle: { fontSize: 18, fontWeight: '600' },
+
   syncButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    alignSelf: 'flex-start',
     gap: 6,
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 12,
   },
-  syncButtonText: {
-    color: '#fff',
-    fontWeight: '600',
-  },
+  syncButtonText: { color: '#fff', fontSize: 14, fontWeight: '600' },
+
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -563,31 +633,12 @@ const styles = StyleSheet.create({
     marginTop: 24,
     marginBottom: 10,
   },
-  sectionTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    letterSpacing: 0.6,
-  },
-  sectionCount: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  sectionNote: {
-    fontSize: 13,
-    marginTop: 8,
-    lineHeight: 18,
-  },
-  errorText: {
-    fontSize: 13,
-    marginTop: 8,
-    lineHeight: 18,
-  },
-  actionRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-    marginBottom: 12,
-  },
+  sectionTitle: { fontSize: 13, fontWeight: '600', letterSpacing: 0.6 },
+  sectionCount: { fontSize: 13, fontWeight: '600' },
+  sectionNote: { fontSize: 13, marginTop: 8, lineHeight: 18 },
+  errorText: { fontSize: 13, marginTop: 8, lineHeight: 18 },
+
+  actionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 12 },
   secondaryButton: {
     alignSelf: 'flex-start',
     paddingHorizontal: 14,
@@ -595,65 +646,31 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
   },
-  secondaryButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  highlightCard: {
-    marginBottom: 12,
-  },
-  historyCard: {
-    marginBottom: 10,
-  },
-  highlightHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 12,
-    marginBottom: 8,
-  },
-  sourceBlock: {
-    flex: 1,
-    gap: 4,
-  },
-  inlineMetaRow: {
+  secondaryButtonText: { fontSize: 14, fontWeight: '600' },
+
+  highlightCard: { marginBottom: 12 },
+  historyCard: { marginBottom: 10 },
+
+  cardTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  highlightSource: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  metaText: {
-    fontSize: 13,
-    marginTop: 2,
-  },
-  highlightContent: {
-    fontSize: 16,
-    lineHeight: 24,
-    marginBottom: 8,
-  },
-  highlightDetail: {
-    fontSize: 14,
-    lineHeight: 20,
-    marginBottom: 12,
-  },
-  label: {
-    fontSize: 12,
-    fontWeight: '600',
-    letterSpacing: 0.5,
-    marginBottom: 8,
-  },
-  inlineLabel: {
-    marginTop: 16,
-  },
-  actionButtons: {
-    flexDirection: 'row',
     justifyContent: 'space-between',
-    gap: 10,
-    marginTop: 14,
+    marginBottom: 10,
   },
+  cardLeading: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
+  dot: { width: 9, height: 9, borderRadius: 4.5, flexShrink: 0 },
+  cardMeta: { flex: 1 },
+  editButton: { padding: 4 },
+
+  highlightSource: { fontSize: 14, fontWeight: '600' },
+  metaText: { fontSize: 12, marginTop: 1 },
+  highlightContent: { fontSize: 16, fontWeight: '700', lineHeight: 24, letterSpacing: -0.2, marginBottom: 12 },
+
+  pillsRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 14 },
+  categoryPill: { borderRadius: 999, paddingHorizontal: 9, paddingVertical: 5 },
+  categoryPillText: { fontSize: 11, fontWeight: '700' },
+
+  actionButtons: { flexDirection: 'row', gap: 10 },
   outlineAction: {
     flex: 1,
     alignItems: 'center',
@@ -662,10 +679,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
   },
-  outlineActionText: {
-    fontSize: 15,
-    fontWeight: '600',
-  },
+  outlineActionText: { fontSize: 15, fontWeight: '600' },
   primaryAction: {
     flex: 1,
     flexDirection: 'row',
@@ -675,37 +689,88 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 12,
   },
-  primaryActionText: {
-    color: '#fff',
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  warningBadge: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 999,
-  },
-  warningBadgeText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
+  primaryActionText: { color: '#fff', fontSize: 15, fontWeight: '600' },
+
   historyHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     gap: 10,
-    marginBottom: 6,
+    marginBottom: 4,
   },
-  historyTitleBlock: {
+  historySource: { fontSize: 14, fontWeight: '600', flex: 1 },
+  historyContent: { fontSize: 14, lineHeight: 20 },
+
+  // Edit bottom sheet
+  modalOverlay: { flex: 1, justifyContent: 'flex-end' },
+  modalBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(15, 23, 42, 0.34)',
+  },
+  modalKeyboard: { width: '100%', maxHeight: '92%' },
+  sheetHandle: {
+    width: 44,
+    height: 5,
+    borderRadius: 999,
+    alignSelf: 'center',
+    marginBottom: 8,
+  },
+  modalCard: {
+    width: '100%',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: 0,
+    overflow: 'hidden',
+    shadowOffset: { width: 0, height: -10 },
+    shadowOpacity: 0.18,
+    shadowRadius: 30,
+    elevation: 10,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  modalTitle: { fontSize: 22, fontWeight: '800', letterSpacing: -0.4 },
+  closeButton: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 16,
+  },
+  modalContent: { padding: 20, paddingBottom: 32 },
+  field: { marginBottom: 20 },
+  fieldLabel: { fontSize: 13, fontWeight: '600', letterSpacing: 0.5, marginBottom: 8 },
+  input: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 16,
+  },
+  contentInput: { minHeight: 80 },
+  detailInput: { minHeight: 60 },
+  modalActions: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 8 },
+  cancelButton: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+  },
+  cancelButtonText: { fontSize: 15, fontWeight: '500' },
+  saveButton: {
     flex: 1,
-    gap: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    borderRadius: 12,
   },
-  historySource: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  historyContent: {
-    fontSize: 14,
-    lineHeight: 20,
-  },
+  saveButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
 });
