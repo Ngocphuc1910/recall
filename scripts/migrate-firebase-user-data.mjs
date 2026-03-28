@@ -6,16 +6,12 @@ const PROJECT_ID = getProjectId();
 const FIRESTORE_BASE = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents`;
 
 async function main() {
-  const { sourceUid, targetUid, dryRun } = parseArgs(process.argv.slice(2));
+  const { sourceUid, targetAccountId, dryRun } = parseArgs(process.argv.slice(2));
   const accessToken = getAccessToken();
-
-  if (sourceUid === targetUid) {
-    throw new Error('Source UID and target UID must be different.');
-  }
 
   console.log(`Migrating data in Firebase project ${PROJECT_ID}`);
   console.log(`Source UID: ${sourceUid}`);
-  console.log(`Target UID: ${targetUid}`);
+  console.log(`Target accountId: ${targetAccountId}`);
   console.log(`Mode: ${dryRun ? 'dry-run' : 'write'}`);
 
   const sourceMeta = await getDocument(`users/${sourceUid}/meta/state`, accessToken);
@@ -35,7 +31,7 @@ async function main() {
 
   if (sourceMeta) {
     writes.push(
-      buildSetWrite(`users/${targetUid}/meta/state`, {
+      buildSetWrite(`accounts/${targetAccountId}/meta/state`, {
         ...sourceMeta.data,
         migratedFromUserId: sourceUid,
         migratedAt: Date.now(),
@@ -44,17 +40,27 @@ async function main() {
   }
 
   sourceItems.forEach((document) => {
-    writes.push(buildSetWrite(`users/${targetUid}/items/${document.id}`, document.data));
+    writes.push(
+      buildSetWrite(`accounts/${targetAccountId}/items/${document.id}`, document.data)
+    );
   });
 
   sourceHighlights.forEach((document) => {
     writes.push(
-      buildSetWrite(`users/${targetUid}/stagedHighlights/${document.id}`, document.data)
+      buildSetWrite(
+        `accounts/${targetAccountId}/stagedHighlights/${document.id}`,
+        document.data
+      )
     );
   });
 
   sourceRequests.forEach((document) => {
-    writes.push(buildSetWrite(`users/${targetUid}/syncRequests/${document.id}`, document.data));
+    writes.push(
+      buildSetWrite(
+        `accounts/${targetAccountId}/syncRequests/${document.id}`,
+        document.data
+      )
+    );
   });
 
   console.log(`Prepared ${writes.length} writes`);
@@ -69,16 +75,17 @@ async function main() {
 
 function parseArgs(args) {
   const sourceUid = args.find((arg) => arg.startsWith('--source='))?.split('=')[1];
-  const targetUid = args.find((arg) => arg.startsWith('--target='))?.split('=')[1];
+  const targetAccountId = args
+    .find((arg) => arg.startsWith('--target-account='))?.split('=')[1];
   const dryRun = args.includes('--dry-run');
 
-  if (!sourceUid || !targetUid) {
+  if (!sourceUid || !targetAccountId) {
     throw new Error(
-      'Usage: node scripts/migrate-firebase-user-data.mjs --source=<uid> --target=<uid> [--dry-run]'
+      'Usage: node scripts/migrate-firebase-user-data.mjs --source=<uid> --target-account=<accountId> [--dry-run]'
     );
   }
 
-  return { sourceUid, targetUid, dryRun };
+  return { sourceUid, targetAccountId, dryRun };
 }
 
 async function getDocument(documentPath, accessToken) {

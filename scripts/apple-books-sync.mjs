@@ -63,7 +63,9 @@ async function processPendingRequests() {
 
   for (const request of pendingRequests) {
     try {
-      console.log(`Processing Apple Books sync request ${request.id} for user ${request.userId}`);
+      console.log(
+        `Processing Apple Books sync request ${request.id} for ${request.ownerCollection}/${request.ownerId}`
+      );
       await patchDocument(
         request.name,
         {
@@ -75,11 +77,11 @@ async function processPendingRequests() {
       );
 
       const existingItems = await listDocuments(
-        `users/${request.userId}/items`,
+        `${request.ownerCollection}/${request.ownerId}/items`,
         accessToken
       );
       const existingStagedHighlights = await listDocuments(
-        `users/${request.userId}/stagedHighlights`,
+        `${request.ownerCollection}/${request.ownerId}/stagedHighlights`,
         accessToken
       );
 
@@ -104,7 +106,7 @@ async function processPendingRequests() {
       if (stagedDocs.length > 0) {
         const writes = stagedDocs.map((highlight) => ({
           update: {
-            name: `projects/${PROJECT_ID}/databases/(default)/documents/users/${request.userId}/stagedHighlights/${highlight.id}`,
+            name: `projects/${PROJECT_ID}/databases/(default)/documents/${request.ownerCollection}/${request.ownerId}/stagedHighlights/${highlight.id}`,
             fields: encodeMap(highlight),
           },
         }));
@@ -249,7 +251,8 @@ async function fetchCollectionGroup(collectionId, accessToken) {
       return {
         name,
         id: parts[parts.length - 1],
-        userId: parts[parts.length - 3],
+        ownerCollection: parts[parts.length - 4],
+        ownerId: parts[parts.length - 3],
         data: decodeMap(entry.document.fields ?? {}),
       };
     });

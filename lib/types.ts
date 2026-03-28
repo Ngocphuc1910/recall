@@ -72,16 +72,83 @@ export interface StagedHighlight {
   rejectedAt?: number;
 }
 
+export type AuthProviderId =
+  | 'anonymous'
+  | 'google.com'
+  | 'apple.com'
+  | 'password'
+  | 'unknown'
+  | (string & {});
+
 export interface SyncRequest {
   id: string;
   source: 'apple_books';
   status: 'pending' | 'running' | 'completed' | 'failed';
   requestedAt: number;
+  requestedByAuthUid?: string;
+  requestedByProvider?: AuthProviderId;
   startedAt?: number;
   completedAt?: number;
   lastSeenAt?: number;
   resultSummary?: string;
   error?: string;
+}
+
+export interface AccountMembership {
+  accountId: string;
+  providers: AuthProviderId[];
+  primaryProvider: AuthProviderId;
+  email?: string | null;
+  displayName?: string | null;
+  createdAt: number;
+  lastLoginAt: number;
+  status: 'anonymous' | 'active' | 'merged' | 'disabled';
+}
+
+export interface AccountProfile {
+  createdAt: number;
+  updatedAt: number;
+  ownerAuthUid: string;
+  linkedProviders: AuthProviderId[];
+  migrationState:
+    | 'pending_legacy_bootstrap'
+    | 'migrating'
+    | 'complete'
+    | 'not_needed';
+  status: 'active' | 'merged' | 'disabled';
+  mergedFromAccountIds?: string[];
+  mergedIntoAccountId?: string;
+  mergedAt?: number;
+}
+
+export interface ResolvedSession {
+  authUid: string;
+  accountId: string;
+  provider: AuthProviderId;
+  isAnonymous: boolean;
+  isStableAccount: boolean;
+}
+
+export interface AccountLinkCode {
+  code: string;
+  targetAccountId: string;
+  createdByAuthUid: string;
+  createdAt: number;
+  expiresAt: number;
+  claimedByAuthUid?: string;
+  claimedAt?: number;
+  status: 'pending' | 'redeemed' | 'expired' | 'cancelled';
+}
+
+export interface AccountMigrationReport {
+  sourceKind: 'legacy_user' | 'account';
+  sourceId: string;
+  targetAccountId: string;
+  copiedItems: number;
+  copiedStagedHighlights: number;
+  copiedSyncRequests: number;
+  mergedCategories: number;
+  performedAt: number;
 }
 
 export interface Category {
@@ -98,6 +165,7 @@ export interface Settings {
   theme: 'light' | 'dark' | 'system';
   reviewQueueMode: 'sequential' | 'random';
   itemReviewMode: 'default' | 'fullscreen';
+  webViewportMode: 'desktop' | 'iphone';
 }
 
 export type NewItem = Omit<
@@ -121,6 +189,7 @@ export const DEFAULT_SETTINGS: Settings = {
   theme: 'system',
   reviewQueueMode: 'sequential',
   itemReviewMode: 'default',
+  webViewportMode: 'desktop',
 };
 
 export function getPriorityDefinition(

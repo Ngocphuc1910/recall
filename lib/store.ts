@@ -13,15 +13,20 @@ import {
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import {
+  createAccountLinkCode as requestAccountLinkCode,
   db,
-  ensureSignedIn,
+  ensureResolvedSession,
   getFirebaseErrorMessage,
-  getUserItemsCollection,
-  getUserMetaRef,
-  getUserStagedHighlightRef,
-  getUserStagedHighlightsCollection,
-  getUserSyncRequestsCollection,
-  subscribeToAuth,
+  getAccountItemRef,
+  getAccountItemsCollection,
+  getAccountMetaRef,
+  getAccountStagedHighlightRef,
+  getAccountStagedHighlightsCollection,
+  getAccountSyncRequestsCollection,
+  redeemAccountLinkCode as redeemLinkCode,
+  signOutCurrentUser,
+  startGoogleRedirectAuth,
+  subscribeToResolvedSession,
 } from './firebase';
 import {
   buildImportDedupKey,
@@ -35,8 +40,10 @@ import {
   DEFAULT_CATEGORIES,
   DEFAULT_PRIORITY_CODE,
   DEFAULT_SETTINGS,
+  AccountLinkCode,
   PriorityCode,
   RecallItem,
+  ResolvedSession,
   Settings,
   StagedHighlight,
   SyncRequest,
@@ -67,6 +74,10 @@ interface RecallStore extends PersistedRecallState {
   cloudAuthStatus: CloudAuthStatus;
   cloudSyncStatus: CloudSyncStatus;
   cloudUserId: string | null;
+  cloudAccountId: string | null;
+  cloudProvider: string | null;
+  cloudIsAnonymous: boolean;
+  cloudIsStableAccount: boolean;
   cloudError: string | null;
   lastSyncedAt: number | null;
   toast: ToastState | null;
@@ -115,6 +126,10 @@ interface RecallStore extends PersistedRecallState {
   showToast: (message: string, tone?: ToastTone) => void;
   hideToast: () => void;
   initializeCloudSync: () => void;
+  startGoogleUpgrade: () => Promise<void>;
+  createAccountLinkCode: () => Promise<AccountLinkCode>;
+  redeemAccountLinkCode: (code: string) => Promise<void>;
+  signOutCloudUser: () => Promise<void>;
 }
 
 interface RemoteMeta {
@@ -127,7 +142,7 @@ let metaUnsubscribe: (() => void) | null = null;
 let itemsUnsubscribe: (() => void) | null = null;
 let stagedHighlightsUnsubscribe: (() => void) | null = null;
 let syncRequestsUnsubscribe: (() => void) | null = null;
-let currentUid: string | null = null;
+let currentSession: ResolvedSession | null = null;
 let isApplyingRemoteState = false;
 let remoteMetaLoaded = false;
 let remoteItemsLoaded = false;
@@ -136,7 +151,6 @@ let remoteItemsState: RecallItem[] = [];
 let remoteItemIds = new Set<string>();
 let syncTimer: ReturnType<typeof setTimeout> | null = null;
 let toastTimer: ReturnType<typeof setTimeout> | null = null;
-let signInRequested = false;
 
 export const useStore = create<RecallStore>()(
   persist(
@@ -150,6 +164,10 @@ export const useStore = create<RecallStore>()(
       cloudAuthStatus: 'idle',
       cloudSyncStatus: 'local',
       cloudUserId: null,
+      cloudAccountId: null,
+      cloudProvider: null,
+      cloudIsAnonymous: true,
+      cloudIsStableAccount: false,
       cloudError: null,
       lastSyncedAt: null,
       toast: null,
@@ -326,7 +344,7 @@ export const useStore = create<RecallStore>()(
       },
 
       requestAppleBooksSync: async () => {
-        const uid = await ensureCurrentUid(set);
+        const session = await ensureCurrentSession(set);
         const existingRequest = get().syncRequests.find(
           (request) =>
             request.source === 'apple_books' &&
@@ -337,7 +355,13 @@ export const useStore = create<RecallStore>()(
           return;
         }
 
-        const requestRef = doc(getUserSyncRequestsCollection(uid));
+        if (!session.isStableAccount) {
+          throw new Error(
+            'A stable signed-in account is required before requesting Apple Books sync.'
+          );
+        }
+
+        const requestRef = doc(getAccountSyncRequestsCollection(session.accountId));
         const now = Date.now();
 
         await setDoc(requestRef, {
@@ -345,14 +369,16 @@ export const useStore = create<RecallStore>()(
           source: 'apple_books',
           status: 'pending',
           requestedAt: now,
+          requestedByAuthUid: session.authUid,
+          requestedByProvider: session.provider,
           lastSeenAt: now,
         });
       },
 
       updateStagedHighlightCategory: async (id, categoryId) => {
-        const uid = await ensureCurrentUid(set);
+        const session = await ensureCurrentSession(set);
 
-        await updateDoc(getUserStagedHighlightRef(uid, id), {
+        await updateDoc(getAccountStagedHighlightRef(session.accountId, id), {
           categoryId,
           categoryStatus: 'chosen',
           updatedAt: Date.now(),
@@ -360,10 +386,10 @@ export const useStore = create<RecallStore>()(
       },
 
       updateStagedHighlightPriority: async (id, priorityCode) => {
-        const uid = await ensureCurrentUid(set);
+        const session = await ensureCurrentSession(set);
         const priority = getPriorityDefinition(priorityCode);
 
-        await updateDoc(getUserStagedHighlightRef(uid, id), {
+        await updateDoc(getAccountStagedHighlightRef(session.accountId, id), {
           priorityCode: priority.code,
           priorityLabel: priority.label,
           updatedAt: Date.now(),
@@ -371,7 +397,7 @@ export const useStore = create<RecallStore>()(
       },
 
       approveStagedHighlight: async (id) => {
-        const uid = await ensureCurrentUid(set);
+        const session = await ensureCurrentSession(set);
         const stagedHighlight = get().stagedHighlights.find(
           (highlight) => highlight.id === id
         );
@@ -412,7 +438,7 @@ export const useStore = create<RecallStore>()(
           scheduleCloudSync(get, set);
         }
 
-        await updateDoc(getUserStagedHighlightRef(uid, id), {
+        await updateDoc(getAccountStagedHighlightRef(session.accountId, id), {
           approvalStatus: 'approved',
           importStatus: itemAlreadyExists ? 'skipped_duplicate' : 'imported',
           approvedAt: Date.now(),
@@ -421,9 +447,9 @@ export const useStore = create<RecallStore>()(
       },
 
       rejectStagedHighlight: async (id) => {
-        const uid = await ensureCurrentUid(set);
+        const session = await ensureCurrentSession(set);
 
-        await updateDoc(getUserStagedHighlightRef(uid, id), {
+        await updateDoc(getAccountStagedHighlightRef(session.accountId, id), {
           approvalStatus: 'rejected',
           rejectedAt: Date.now(),
           updatedAt: Date.now(),
@@ -431,7 +457,7 @@ export const useStore = create<RecallStore>()(
       },
 
       approveAllPendingStagedHighlights: async () => {
-        const uid = await ensureCurrentUid(set);
+        const session = await ensureCurrentSession(set);
         const pendingHighlights = get().stagedHighlights.filter(
           (highlight) =>
             highlight.approvalStatus === 'pending' &&
@@ -487,11 +513,11 @@ export const useStore = create<RecallStore>()(
         const batch = writeBatch(db);
 
         itemsToAdd.forEach((item) => {
-          batch.set(getUserItemRef(uid, item.id), sanitizeForFirestore(item));
+          batch.set(getAccountItemRef(session.accountId, item.id), sanitizeForFirestore(item));
         });
 
         stagedUpdates.forEach((update) => {
-          batch.update(getUserStagedHighlightRef(uid, update.id), update);
+          batch.update(getAccountStagedHighlightRef(session.accountId, update.id), update);
         });
 
         await batch.commit();
@@ -508,7 +534,7 @@ export const useStore = create<RecallStore>()(
       },
 
       rejectAllPendingStagedHighlights: async () => {
-        const uid = await ensureCurrentUid(set);
+        const session = await ensureCurrentSession(set);
         const pendingHighlights = get().stagedHighlights.filter(
           (highlight) => highlight.approvalStatus === 'pending'
         );
@@ -521,7 +547,7 @@ export const useStore = create<RecallStore>()(
         const batch = writeBatch(db);
 
         pendingHighlights.forEach((highlight) => {
-          batch.update(getUserStagedHighlightRef(uid, highlight.id), {
+          batch.update(getAccountStagedHighlightRef(session.accountId, highlight.id), {
             approvalStatus: 'rejected',
             rejectedAt: now,
             updatedAt: now,
@@ -545,7 +571,7 @@ export const useStore = create<RecallStore>()(
       },
 
       setPendingHighlightsCategory: async (categoryId) => {
-        const uid = await ensureCurrentUid(set);
+        const session = await ensureCurrentSession(set);
         const pendingHighlights = get().stagedHighlights.filter(
           (highlight) =>
             highlight.approvalStatus === 'pending' &&
@@ -560,7 +586,7 @@ export const useStore = create<RecallStore>()(
         const now = Date.now();
 
         pendingHighlights.forEach((highlight) => {
-          batch.update(getUserStagedHighlightRef(uid, highlight.id), {
+          batch.update(getAccountStagedHighlightRef(session.accountId, highlight.id), {
             categoryId,
             categoryStatus: 'chosen',
             updatedAt: now,
@@ -598,6 +624,45 @@ export const useStore = create<RecallStore>()(
         set({ toast: null });
       },
 
+      startGoogleUpgrade: async () => {
+        await startGoogleRedirectAuth();
+      },
+
+      createAccountLinkCode: async () => {
+        const session = await ensureCurrentSession(set);
+        if (!session.isStableAccount) {
+          throw new Error('Upgrade to a stable account before generating a link code.');
+        }
+        return requestAccountLinkCode();
+      },
+
+      redeemAccountLinkCode: async (code) => {
+        const session = await ensureCurrentSession(set);
+        if (!session.isStableAccount) {
+          throw new Error('Upgrade to a stable account before redeeming a link code.');
+        }
+
+        await redeemLinkCode(code.trim());
+        currentSession = await ensureResolvedSession();
+        attachRemoteListeners(currentSession, set, get);
+      },
+
+      signOutCloudUser: async () => {
+        await signOutCurrentUser();
+        currentSession = null;
+        detachRemoteListeners(set);
+        set({
+          cloudAuthStatus: 'idle',
+          cloudSyncStatus: 'local',
+          cloudUserId: null,
+          cloudAccountId: null,
+          cloudProvider: null,
+          cloudIsAnonymous: true,
+          cloudIsStableAccount: false,
+          cloudError: null,
+        });
+      },
+
       initializeCloudSync: () => {
         if (authUnsubscribe) {
           return;
@@ -605,37 +670,29 @@ export const useStore = create<RecallStore>()(
 
         set({
           cloudAuthStatus: 'connecting',
-          cloudSyncStatus: currentUid ? 'syncing' : 'local',
+          cloudSyncStatus: currentSession ? 'syncing' : 'local',
           cloudError: null,
         });
 
-        authUnsubscribe = subscribeToAuth((user) => {
-          if (!user) {
-            currentUid = null;
+        authUnsubscribe = subscribeToResolvedSession((session) => {
+          if (!session) {
+            currentSession = null;
             detachRemoteListeners(set);
             set({
               cloudAuthStatus: 'connecting',
               cloudSyncStatus: 'local',
               cloudUserId: null,
+              cloudAccountId: null,
+              cloudProvider: null,
+              cloudIsAnonymous: true,
+              cloudIsStableAccount: false,
             });
-
-            if (!signInRequested) {
-              signInRequested = true;
-              ensureSignedIn().catch((error) => {
-                set({
-                  cloudAuthStatus: 'error',
-                  cloudSyncStatus: 'error',
-                  cloudError: getFirebaseErrorMessage(error),
-                });
-              });
-            }
             return;
           }
 
-          signInRequested = false;
-
           if (
-            currentUid === user.uid &&
+            currentSession?.authUid === session.authUid &&
+            currentSession?.accountId === session.accountId &&
             metaUnsubscribe &&
             itemsUnsubscribe &&
             stagedHighlightsUnsubscribe &&
@@ -643,17 +700,27 @@ export const useStore = create<RecallStore>()(
           ) {
             set({
               cloudAuthStatus: 'connected',
-              cloudUserId: user.uid,
+              cloudUserId: session.authUid,
+              cloudAccountId: session.accountId,
+              cloudProvider: session.provider,
+              cloudIsAnonymous: session.isAnonymous,
+              cloudIsStableAccount: session.isStableAccount,
               cloudError: null,
             });
             return;
           }
 
-          currentUid = user.uid;
-          attachRemoteListeners(user.uid, set, get);
+          currentSession = session;
+          attachRemoteListeners(session, set, get);
+        }, (error) => {
+          set({
+            cloudAuthStatus: 'error',
+            cloudSyncStatus: 'error',
+            cloudError: getFirebaseErrorMessage(error),
+          });
         });
 
-        ensureSignedIn().catch((error) => {
+        ensureResolvedSession().catch((error) => {
           set({
             cloudAuthStatus: 'error',
             cloudSyncStatus: 'error',
@@ -706,7 +773,7 @@ function resolveImportCategoryId(
 }
 
 function attachRemoteListeners(
-  uid: string,
+  session: ResolvedSession,
   set: (
     partial:
       | Partial<RecallStore>
@@ -726,14 +793,18 @@ function attachRemoteListeners(
   set({
     cloudAuthStatus: 'connected',
     cloudSyncStatus: 'syncing',
-    cloudUserId: uid,
+    cloudUserId: session.authUid,
+    cloudAccountId: session.accountId,
+    cloudProvider: session.provider,
+    cloudIsAnonymous: session.isAnonymous,
+    cloudIsStableAccount: session.isStableAccount,
     cloudError: null,
     stagedHighlights: [],
     syncRequests: [],
   });
 
   metaUnsubscribe = onSnapshot(
-    getUserMetaRef(uid),
+    getAccountMetaRef(session.accountId),
     (snapshot) => {
       remoteMetaLoaded = true;
       remoteMetaState = snapshot.exists()
@@ -750,7 +821,7 @@ function attachRemoteListeners(
   );
 
   itemsUnsubscribe = onSnapshot(
-    query(getUserItemsCollection(uid), orderBy('createdAt', 'desc')),
+    query(getAccountItemsCollection(session.accountId), orderBy('createdAt', 'desc')),
     (snapshot) => {
       remoteItemsLoaded = true;
       remoteItemIds = new Set(snapshot.docs.map((itemDoc) => itemDoc.id));
@@ -771,7 +842,10 @@ function attachRemoteListeners(
   );
 
   stagedHighlightsUnsubscribe = onSnapshot(
-    query(getUserStagedHighlightsCollection(uid), orderBy('syncedAt', 'desc')),
+    query(
+      getAccountStagedHighlightsCollection(session.accountId),
+      orderBy('syncedAt', 'desc')
+    ),
     (snapshot) => {
       set({
         stagedHighlights: snapshot.docs.map((highlightDoc) =>
@@ -791,7 +865,7 @@ function attachRemoteListeners(
 
   syncRequestsUnsubscribe = onSnapshot(
     query(
-      getUserSyncRequestsCollection(uid),
+      getAccountSyncRequestsCollection(session.accountId),
       orderBy('requestedAt', 'desc'),
       limit(20)
     ),
@@ -880,7 +954,7 @@ function scheduleCloudSync(
   ) => void,
   immediate = false
 ) {
-  if (!currentUid || isApplyingRemoteState) {
+  if (!currentSession || isApplyingRemoteState) {
     return;
   }
 
@@ -913,13 +987,14 @@ async function pushStateToCloud(
     replace?: false
   ) => void
 ) {
-  if (!currentUid) {
+  if (!currentSession) {
     return;
   }
 
   const state = getPersistedState(get);
   const operations: Array<(batch: ReturnType<typeof writeBatch>) => void> = [];
-  const metaRef = getUserMetaRef(currentUid);
+  const accountId = currentSession.accountId;
+  const metaRef = getAccountMetaRef(accountId);
 
   operations.push((batch) => {
     batch.set(metaRef, {
@@ -933,7 +1008,7 @@ async function pushStateToCloud(
   state.items.forEach((item) => {
     localItemIds.add(item.id);
     operations.push((batch) => {
-      batch.set(getUserItemRef(currentUid as string, item.id), sanitizeForFirestore(item));
+      batch.set(getAccountItemRef(accountId, item.id), sanitizeForFirestore(item));
     });
   });
 
@@ -943,7 +1018,7 @@ async function pushStateToCloud(
     }
 
     operations.push((batch) => {
-      batch.delete(getUserItemRef(currentUid as string, itemId));
+      batch.delete(getAccountItemRef(accountId, itemId));
     });
   });
 
@@ -970,7 +1045,7 @@ async function commitInChunks(
   }
 }
 
-async function ensureCurrentUid(
+async function ensureCurrentSession(
   set: (
     partial:
       | Partial<RecallStore>
@@ -978,21 +1053,25 @@ async function ensureCurrentUid(
     replace?: false
   ) => void
 ) {
-  if (currentUid) {
-    return currentUid;
+  if (currentSession) {
+    return currentSession;
   }
 
   set({
     cloudAuthStatus: 'connecting',
     cloudError: null,
   });
-  const user = await ensureSignedIn();
-  currentUid = user.uid;
+  const session = await ensureResolvedSession();
+  currentSession = session;
   set({
     cloudAuthStatus: 'connected',
-    cloudUserId: user.uid,
+    cloudUserId: session.authUid,
+    cloudAccountId: session.accountId,
+    cloudProvider: session.provider,
+    cloudIsAnonymous: session.isAnonymous,
+    cloudIsStableAccount: session.isStableAccount,
   });
-  return user.uid;
+  return session;
 }
 
 function normalizeRecallItem(item: RecallItem): RecallItem {
@@ -1075,10 +1154,6 @@ function getPersistedState(get: () => RecallStore): PersistedRecallState {
     categories: state.categories,
     settings: state.settings,
   };
-}
-
-function getUserItemRef(uid: string, itemId: string) {
-  return doc(db, 'users', uid, 'items', itemId);
 }
 
 function getRecallItemDedupKey(item: RecallItem) {

@@ -12,6 +12,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   useColorScheme,
+  useWindowDimensions,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -22,7 +23,49 @@ import RecallCard from '@/components/RecallCard';
 import EmptyState from '@/components/EmptyState';
 import CategoryPicker from '@/components/CategoryPicker';
 import PriorityPicker from '@/components/PriorityPicker';
-import { DEFAULT_PRIORITY_CODE, PriorityCode } from '@/lib/types';
+import { DEFAULT_PRIORITY_CODE, PRIORITY_DEFINITIONS, PriorityCode } from '@/lib/types';
+
+interface FilterChipProps {
+  label: string;
+  selected: boolean;
+  onPress: () => void;
+  colors: (typeof Colors)['light'];
+  selectedColor?: string;
+}
+
+function FilterChip({
+  label,
+  selected,
+  onPress,
+  colors,
+  selectedColor,
+}: FilterChipProps) {
+  const activeColor = selectedColor ?? colors.tint;
+
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      activeOpacity={0.86}
+      style={[
+        styles.chip,
+        {
+          backgroundColor: selected ? activeColor + '16' : colors.surfaceSecondary,
+          borderColor: selected ? activeColor : colors.border,
+          borderWidth: selected ? 1 : StyleSheet.hairlineWidth,
+        },
+      ]}
+    >
+      <Text
+        style={[
+          styles.chipText,
+          { color: selected ? activeColor : colors.textSecondary },
+        ]}
+      >
+        {label}
+      </Text>
+    </TouchableOpacity>
+  );
+}
 
 export default function TodayScreen() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -30,15 +73,23 @@ export default function TodayScreen() {
   const isWeb = Platform.OS === 'web';
   const router = useRouter();
   const tabBarScroll = useTabBarScrollHandler();
+  const { width } = useWindowDimensions();
 
   const items = useStore((s) => s.items);
   const categories = useStore((s) => s.categories);
   const addItem = useStore((s) => s.addItem);
   const markRecalled = useStore((s) => s.markRecalled);
+  const webViewportMode = useStore(
+    (s) => s.settings.webViewportMode ?? 'desktop'
+  );
+  const updateSettings = useStore((s) => s.updateSettings);
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [filterMode, setFilterMode] = useState<'today' | 'week' | 'month' | 'pastdue'>('today');
   const [showFilterMenu, setShowFilterMenu] = useState(false);
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [selectedPriorities, setSelectedPriorities] = useState<PriorityCode[]>([]);
+  const [selectedSources, setSelectedSources] = useState<string[]>([]);
   const [content, setContent] = useState('');
   const [detail, setDetail] = useState('');
   const [source, setSource] = useState('');
@@ -52,7 +103,7 @@ export default function TodayScreen() {
     }
   }, [categories, categoryId]);
 
-  const filteredItems = useMemo(() => {
+  const timeFilteredItems = useMemo(() => {
     const now = new Date();
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
     const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999).getTime();
@@ -75,6 +126,47 @@ export default function TodayScreen() {
     });
   }, [items, filterMode]);
 
+  const sourceOptions = useMemo(() => {
+    const uniqueSources = new Map<string, string>();
+    timeFilteredItems.forEach((item) => {
+      const src = item.source.trim() || 'Unknown source';
+      const normalized = src.toLowerCase();
+      if (!uniqueSources.has(normalized)) {
+        uniqueSources.set(normalized, src);
+      }
+    });
+    return Array.from(uniqueSources.entries())
+      .map(([value, label]) => ({ value, label }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [timeFilteredItems]);
+
+  const activeFacetFilterCount =
+    selectedCategories.length +
+    selectedPriorities.length +
+    selectedSources.length;
+
+  const filteredItems = useMemo(() => {
+    let result = timeFilteredItems;
+
+    if (selectedCategories.length > 0) {
+      result = result.filter((item) =>
+        selectedCategories.includes(item.categoryId)
+      );
+    }
+    if (selectedPriorities.length > 0) {
+      result = result.filter((item) =>
+        selectedPriorities.includes(item.priorityCode)
+      );
+    }
+    if (selectedSources.length > 0) {
+      result = result.filter((item) =>
+        selectedSources.includes((item.source.trim() || 'Unknown source').toLowerCase())
+      );
+    }
+
+    return result;
+  }, [timeFilteredItems, selectedCategories, selectedPriorities, selectedSources]);
+
   const filterTitles: Record<string, string> = {
     today: 'Today',
     week: 'This Week',
@@ -82,9 +174,40 @@ export default function TodayScreen() {
     pastdue: 'Past Due',
   };
 
+  const toggleCategory = (categoryId: string) => {
+    setSelectedCategories((current) =>
+      current.includes(categoryId)
+        ? current.filter((id) => id !== categoryId)
+        : [...current, categoryId]
+    );
+  };
+  const togglePriority = (priorityCode: PriorityCode) => {
+    setSelectedPriorities((current) =>
+      current.includes(priorityCode)
+        ? current.filter((code) => code !== priorityCode)
+        : [...current, priorityCode]
+    );
+  };
+  const toggleSource = (sourceId: string) => {
+    setSelectedSources((current) =>
+      current.includes(sourceId)
+        ? current.filter((id) => id !== sourceId)
+        : [...current, sourceId]
+    );
+  };
+  const clearFacetFilters = () => {
+    setSelectedCategories([]);
+    setSelectedPriorities([]);
+    setSelectedSources([]);
+  };
+
   const canSave = content.trim().length > 0;
+  const showViewportToggle = isWeb && width >= 900;
 
   const openAddModal = () => setShowAddModal(true);
+  const setViewportMode = (mode: 'desktop' | 'iphone') => {
+    updateSettings({ webViewportMode: mode });
+  };
 
   const closeAddModal = () => {
     setShowAddModal(false);
@@ -288,85 +411,104 @@ export default function TodayScreen() {
               : `${filteredItems.length} item${filteredItems.length !== 1 ? 's' : ''} to recall`}
           </Text>
         </View>
-        <TouchableOpacity
-          onPress={() => setShowFilterMenu(!showFilterMenu)}
-          hitSlop={10}
-          style={[
-            styles.filterButton,
-            {
-              backgroundColor: filterMode !== 'today' ? colors.tint + '15' : colors.surface,
-              borderColor: filterMode !== 'today' ? colors.tint + '30' : colors.border,
-            },
-          ]}
-          activeOpacity={0.8}
-        >
-          <Ionicons
-            name="options-outline"
-            size={18}
-            color={filterMode !== 'today' ? colors.tint : colors.textSecondary}
-          />
-        </TouchableOpacity>
-      </View>
+        <View style={styles.headerActions}>
+          {showViewportToggle ? (
+            <View
+              style={[
+                styles.viewportSwitch,
+                {
+                  backgroundColor: colors.surface,
+                  borderColor: colors.border,
+                },
+              ]}
+            >
+              <TouchableOpacity
+                onPress={() => setViewportMode('desktop')}
+                activeOpacity={0.82}
+                style={[
+                  styles.viewportSwitchButton,
+                  webViewportMode === 'desktop' && {
+                    backgroundColor: colors.surfaceSecondary,
+                  },
+                ]}
+              >
+                <Ionicons
+                  name="desktop-outline"
+                  size={16}
+                  color={
+                    webViewportMode === 'desktop'
+                      ? colors.text
+                      : colors.textSecondary
+                  }
+                />
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => setViewportMode('iphone')}
+                activeOpacity={0.82}
+                style={[
+                  styles.viewportSwitchButton,
+                  webViewportMode === 'iphone' && {
+                    backgroundColor: colors.surfaceSecondary,
+                  },
+                ]}
+              >
+                <Ionicons
+                  name="phone-portrait-outline"
+                  size={16}
+                  color={
+                    webViewportMode === 'iphone'
+                      ? colors.text
+                      : colors.textSecondary
+                  }
+                />
+              </TouchableOpacity>
+            </View>
+          ) : null}
 
-      {showFilterMenu && (
-        <>
-          <Pressable
-            style={styles.filterBackdrop}
-            onPress={() => setShowFilterMenu(false)}
-          />
-          <View
+          <TouchableOpacity
+            onPress={() => setShowFilterMenu(!showFilterMenu)}
+            hitSlop={10}
             style={[
-              styles.filterMenu,
+              styles.filterButton,
               {
-                backgroundColor: colors.surface,
-                borderColor: colors.border,
-                shadowColor: colors.shadow,
+                backgroundColor:
+                  (filterMode !== 'today' || activeFacetFilterCount > 0)
+                    ? colors.tint + '15'
+                    : colors.surface,
+                borderColor:
+                  (filterMode !== 'today' || activeFacetFilterCount > 0)
+                    ? colors.tint + '30'
+                    : colors.border,
               },
             ]}
+            activeOpacity={0.8}
           >
-            {([
-              { key: 'today' as const, label: 'Today', icon: 'today-outline' as const },
-              { key: 'week' as const, label: 'This Week', icon: 'calendar-outline' as const },
-              { key: 'month' as const, label: 'This Month', icon: 'calendar-number-outline' as const },
-              { key: 'pastdue' as const, label: 'Past Due', icon: 'alert-circle-outline' as const },
-            ]).map((option) => {
-              const active = filterMode === option.key;
-              return (
-                <TouchableOpacity
-                  key={option.key}
-                  onPress={() => {
-                    setFilterMode(option.key);
-                    setShowFilterMenu(false);
-                  }}
-                  style={[
-                    styles.filterOption,
-                    active && { backgroundColor: colors.tint + '12' },
-                  ]}
-                  activeOpacity={0.8}
-                >
-                  <Ionicons
-                    name={option.icon}
-                    size={18}
-                    color={active ? colors.tint : colors.textSecondary}
-                  />
-                  <Text
-                    style={[
-                      styles.filterOptionText,
-                      { color: active ? colors.tint : colors.text },
-                      active && { fontWeight: '700' as const },
-                    ]}
-                  >
-                    {option.label}
-                  </Text>
-                  {active && (
-                    <Ionicons name="checkmark" size={16} color={colors.tint} />
-                  )}
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        </>
-      )}
+            <Ionicons
+              name="options-outline"
+              size={18}
+              color={
+                (filterMode !== 'today' || activeFacetFilterCount > 0)
+                  ? colors.tint
+                  : colors.textSecondary
+              }
+            />
+            {activeFacetFilterCount > 0 ? (
+              <View
+                style={[
+                  styles.filterCountBadge,
+                  { backgroundColor: colors.tint },
+                ]}
+              >
+                <Text style={styles.filterCountText}>
+                  {activeFacetFilterCount}
+                </Text>
+              </View>
+            ) : null}
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* Filter sheet rendered below via Modal / web overlay */}
 
       {filteredItems.length === 0 ? (
         <EmptyState
@@ -439,8 +581,195 @@ export default function TodayScreen() {
           {renderAddOverlay()}
         </Modal>
       )}
+
+      {isWeb ? (
+        showFilterMenu ? (
+          <View style={styles.webModalRoot}>{renderFilterSheet()}</View>
+        ) : null
+      ) : (
+        <Modal
+          visible={showFilterMenu}
+          animationType="fade"
+          transparent
+          onRequestClose={() => setShowFilterMenu(false)}
+        >
+          {renderFilterSheet()}
+        </Modal>
+      )}
     </View>
   );
+
+  function renderFilterSheet() {
+    const closeSheet = () => setShowFilterMenu(false);
+    return (
+      <View style={styles.sheetOverlay}>
+        <Pressable style={styles.sheetBackdrop} onPress={closeSheet} />
+        <View
+          style={[
+            styles.sheetCard,
+            {
+              backgroundColor: colors.surface,
+              borderColor: colors.borderLight,
+              shadowColor: colors.shadow,
+            },
+          ]}
+        >
+          <View
+            style={[
+              styles.sheetHandle,
+              { backgroundColor: colors.textTertiary + '40' },
+            ]}
+          />
+
+          <View style={styles.sheetHeader}>
+            <View style={styles.sheetHeaderCopy}>
+              <Text style={[styles.sheetTitle, { color: colors.text }]}>
+                Filter
+              </Text>
+              <Text style={[styles.sheetDescription, { color: colors.textSecondary }]}>
+                Narrow items by time range, category, priority, or source.
+              </Text>
+            </View>
+            <TouchableOpacity
+              onPress={closeSheet}
+              style={[
+                styles.sheetCloseButton,
+                { backgroundColor: colors.surfaceSecondary, borderColor: colors.border },
+              ]}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="close-outline" size={18} color={colors.textSecondary} />
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView
+            style={styles.sheetScroll}
+            contentContainerStyle={styles.sheetScrollContent}
+            showsVerticalScrollIndicator={false}
+          >
+            {/* Time range */}
+            <View style={styles.filterSection}>
+              <Text style={[styles.filterLabel, { color: colors.textSecondary }]}>
+                TIME RANGE
+              </Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+                {([
+                  { key: 'today' as const, label: 'Today', icon: 'today-outline' as const },
+                  { key: 'week' as const, label: 'This Week', icon: 'calendar-outline' as const },
+                  { key: 'month' as const, label: 'This Month', icon: 'calendar-number-outline' as const },
+                  { key: 'pastdue' as const, label: 'Past Due', icon: 'alert-circle-outline' as const },
+                ]).map((option) => (
+                  <FilterChip
+                    key={option.key}
+                    label={option.label}
+                    selected={filterMode === option.key}
+                    onPress={() => setFilterMode(option.key)}
+                    colors={colors}
+                  />
+                ))}
+              </ScrollView>
+            </View>
+
+            {/* Category */}
+            <View style={styles.filterSection}>
+              <Text style={[styles.filterLabel, { color: colors.textSecondary }]}>
+                CATEGORY
+              </Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+                <FilterChip
+                  label="All"
+                  selected={selectedCategories.length === 0}
+                  onPress={() => setSelectedCategories([])}
+                  colors={colors}
+                />
+                {categories.map((category) => (
+                  <FilterChip
+                    key={category.id}
+                    label={category.name}
+                    selected={selectedCategories.includes(category.id)}
+                    onPress={() => toggleCategory(category.id)}
+                    colors={colors}
+                    selectedColor={category.color}
+                  />
+                ))}
+              </ScrollView>
+            </View>
+
+            {/* Priority */}
+            <View style={styles.filterSection}>
+              <Text style={[styles.filterLabel, { color: colors.textSecondary }]}>
+                PRIORITY
+              </Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+                <FilterChip
+                  label="Any"
+                  selected={selectedPriorities.length === 0}
+                  onPress={() => setSelectedPriorities([])}
+                  colors={colors}
+                />
+                {PRIORITY_DEFINITIONS.map((priority) => (
+                  <FilterChip
+                    key={priority.code}
+                    label={priority.label}
+                    selected={selectedPriorities.includes(priority.code)}
+                    onPress={() => togglePriority(priority.code)}
+                    colors={colors}
+                    selectedColor={priority.color}
+                  />
+                ))}
+              </ScrollView>
+            </View>
+
+            {/* Source */}
+            <View style={styles.filterSection}>
+              <Text style={[styles.filterLabel, { color: colors.textSecondary }]}>
+                SOURCE
+              </Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+                <FilterChip
+                  label="Any"
+                  selected={selectedSources.length === 0}
+                  onPress={() => setSelectedSources([])}
+                  colors={colors}
+                />
+                {sourceOptions.map((src) => (
+                  <FilterChip
+                    key={src.value}
+                    label={src.label}
+                    selected={selectedSources.includes(src.value)}
+                    onPress={() => toggleSource(src.value)}
+                    colors={colors}
+                  />
+                ))}
+              </ScrollView>
+            </View>
+          </ScrollView>
+
+          <View style={styles.sheetActions}>
+            <TouchableOpacity
+              onPress={() => { clearFacetFilters(); setFilterMode('today'); }}
+              style={[
+                styles.sheetSecondaryAction,
+                { backgroundColor: colors.surfaceSecondary, borderColor: colors.border },
+              ]}
+              activeOpacity={0.85}
+            >
+              <Text style={[styles.sheetSecondaryActionText, { color: colors.text }]}>
+                Reset
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={closeSheet}
+              style={[styles.sheetPrimaryAction, { backgroundColor: colors.tint }]}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.sheetPrimaryActionText}>Done</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    );
+  }
 }
 
 const styles = StyleSheet.create({
@@ -455,6 +784,11 @@ const styles = StyleSheet.create({
     paddingTop: 16,
     paddingBottom: 12,
     zIndex: 3,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
   },
   title: {
     fontSize: 34,
@@ -473,35 +807,144 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: StyleSheet.hairlineWidth,
   },
-  filterBackdrop: {
-    ...StyleSheet.absoluteFillObject,
-    zIndex: 9,
-  },
-  filterMenu: {
-    position: 'absolute',
-    top: 76,
-    right: 20,
-    borderRadius: 16,
-    borderWidth: StyleSheet.hairlineWidth,
-    overflow: 'hidden',
-    zIndex: 10,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.12,
-    shadowRadius: 20,
-    elevation: 8,
-    minWidth: 190,
-  },
-  filterOption: {
+  viewportSwitch: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 16,
-    paddingVertical: 13,
+    padding: 4,
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+    gap: 4,
   },
-  filterOptionText: {
+  viewportSwitchButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  filterCountBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    minWidth: 18,
+    height: 18,
+    paddingHorizontal: 4,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  filterCountText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  sheetOverlay: {
     flex: 1,
+    justifyContent: 'flex-end',
+  },
+  sheetBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(15, 23, 42, 0.34)',
+  },
+  sheetCard: {
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: 0,
+    maxHeight: '78%',
+    shadowOffset: { width: 0, height: -10 },
+    shadowOpacity: 0.18,
+    shadowRadius: 30,
+    elevation: 10,
+  },
+  sheetHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 16,
+    paddingHorizontal: 18,
+    paddingBottom: 14,
+  },
+  sheetHeaderCopy: {
+    flex: 1,
+  },
+  sheetTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    letterSpacing: -0.4,
+  },
+  sheetDescription: {
+    marginTop: 4,
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  sheetCloseButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sheetScroll: {
+    flexGrow: 0,
+  },
+  sheetScrollContent: {
+    paddingBottom: 12,
+  },
+  filterSection: {
+    gap: 8,
+    paddingTop: 8,
+  },
+  filterLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    paddingHorizontal: 18,
+  },
+  chips: {
+    paddingHorizontal: 18,
+    gap: 8,
+  },
+  chip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+  },
+  chipText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  sheetActions: {
+    flexDirection: 'row',
+    gap: 12,
+    paddingHorizontal: 18,
+    paddingTop: 8,
+    paddingBottom: 18,
+  },
+  sheetSecondaryAction: {
+    flex: 1,
+    height: 48,
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sheetSecondaryActionText: {
     fontSize: 15,
-    fontWeight: '600',
+    fontWeight: '700',
+  },
+  sheetPrimaryAction: {
+    flex: 1.2,
+    height: 48,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sheetPrimaryActionText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '800',
   },
   fab: {
     position: 'absolute',

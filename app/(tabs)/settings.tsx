@@ -32,14 +32,24 @@ export default function SettingsScreen() {
   const cloudAuthStatus = useStore((s) => s.cloudAuthStatus);
   const cloudSyncStatus = useStore((s) => s.cloudSyncStatus);
   const cloudUserId = useStore((s) => s.cloudUserId);
+  const cloudAccountId = useStore((s) => s.cloudAccountId);
+  const cloudProvider = useStore((s) => s.cloudProvider);
+  const cloudIsAnonymous = useStore((s) => s.cloudIsAnonymous);
+  const cloudIsStableAccount = useStore((s) => s.cloudIsStableAccount);
   const cloudError = useStore((s) => s.cloudError);
   const lastSyncedAt = useStore((s) => s.lastSyncedAt);
   const initializeCloudSync = useStore((s) => s.initializeCloudSync);
+  const startGoogleUpgrade = useStore((s) => s.startGoogleUpgrade);
+  const createAccountLinkCode = useStore((s) => s.createAccountLinkCode);
+  const redeemAccountLinkCode = useStore((s) => s.redeemAccountLinkCode);
+  const signOutCloudUser = useStore((s) => s.signOutCloudUser);
 
   const [editingIntervals, setEditingIntervals] = useState(false);
   const [intervalsText, setIntervalsText] = useState(
     settings.defaultIntervals.join(', ')
   );
+  const [generatedLinkCode, setGeneratedLinkCode] = useState<string | null>(null);
+  const [redeemCode, setRedeemCode] = useState('');
 
   const saveIntervals = () => {
     const parsed = intervalsText
@@ -95,6 +105,78 @@ export default function SettingsScreen() {
     }
   };
 
+  const handleGoogleUpgrade = async () => {
+    try {
+      await startGoogleUpgrade();
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'Unable to start Google sign-in.';
+      if (Platform.OS === 'web') {
+        alert(message);
+      } else {
+        Alert.alert('Error', message);
+      }
+    }
+  };
+
+  const handleCreateLinkCode = async () => {
+    try {
+      const linkCode = await createAccountLinkCode();
+      setGeneratedLinkCode(linkCode.code);
+      if (Platform.OS === 'web') {
+        alert(`Link code created: ${linkCode.code}`);
+      }
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'Unable to create account link code.';
+      if (Platform.OS === 'web') {
+        alert(message);
+      } else {
+        Alert.alert('Error', message);
+      }
+    }
+  };
+
+  const handleRedeemLinkCode = async () => {
+    try {
+      await redeemAccountLinkCode(redeemCode.trim());
+      setRedeemCode('');
+      if (Platform.OS === 'web') {
+        alert('Account link code redeemed. Your account is now synced.');
+      } else {
+        Alert.alert('Success', 'Account link code redeemed.');
+      }
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'Unable to redeem account link code.';
+      if (Platform.OS === 'web') {
+        alert(message);
+      } else {
+        Alert.alert('Error', message);
+      }
+    }
+  };
+
+  const handleSignOut = async () => {
+    try {
+      await signOutCloudUser();
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Unable to sign out.';
+      if (Platform.OS === 'web') {
+        alert(message);
+      } else {
+        Alert.alert('Error', message);
+      }
+    }
+  };
+
   return (
     <ScrollView
       style={[styles.container, { backgroundColor: colors.background }]}
@@ -133,11 +215,143 @@ export default function SettingsScreen() {
           />
           <View style={[styles.divider, { backgroundColor: colors.borderLight }]} />
           <StatRow
+            label="Account ID"
+            value={cloudAccountId ? `${cloudAccountId.slice(0, 8)}...` : 'Not resolved'}
+            colors={colors}
+          />
+          <View style={[styles.divider, { backgroundColor: colors.borderLight }]} />
+          <StatRow
+            label="Provider"
+            value={cloudProvider ?? 'Unknown'}
+            colors={colors}
+          />
+          <View style={[styles.divider, { backgroundColor: colors.borderLight }]} />
+          <StatRow
+            label="Account Type"
+            value={cloudIsStableAccount ? 'Stable' : cloudIsAnonymous ? 'Anonymous trial' : 'Temporary'}
+            colors={colors}
+          />
+          <View style={[styles.divider, { backgroundColor: colors.borderLight }]} />
+          <StatRow
             label="Last Sync"
             value={lastSyncedAt ? formatDateTime(lastSyncedAt) : 'Not yet'}
             colors={colors}
           />
         </View>
+
+        {Platform.OS === 'web' && !cloudIsStableAccount ? (
+          <TouchableOpacity
+            onPress={handleGoogleUpgrade}
+            style={[
+              styles.card,
+              styles.linkRow,
+              { backgroundColor: colors.surface, borderColor: colors.borderLight },
+            ]}
+            activeOpacity={0.7}
+          >
+            <View style={styles.linkLeft}>
+              <Ionicons name="logo-google" size={20} color={colors.tint} />
+              <Text style={[styles.linkText, { color: colors.text }]}>
+                Upgrade To Stable Google Account
+              </Text>
+            </View>
+            <Ionicons
+              name="chevron-forward"
+              size={16}
+              color={colors.textTertiary}
+            />
+          </TouchableOpacity>
+        ) : null}
+
+        {cloudIsStableAccount ? (
+          <>
+            <TouchableOpacity
+              onPress={handleCreateLinkCode}
+              style={[
+                styles.card,
+                styles.linkRow,
+                { backgroundColor: colors.surface, borderColor: colors.borderLight },
+              ]}
+              activeOpacity={0.7}
+            >
+              <View style={styles.linkLeft}>
+                <Ionicons name="key-outline" size={20} color={colors.tint} />
+                <Text style={[styles.linkText, { color: colors.text }]}>
+                  Generate Device Link Code
+                </Text>
+              </View>
+              <Ionicons
+                name="chevron-forward"
+                size={16}
+                color={colors.textTertiary}
+              />
+            </TouchableOpacity>
+
+            {generatedLinkCode ? (
+              <Text style={[styles.sectionNote, { color: colors.text }]}>
+                Current link code: {generatedLinkCode}
+              </Text>
+            ) : null}
+
+            <View
+              style={[
+                styles.card,
+                { backgroundColor: colors.surface, borderColor: colors.borderLight },
+              ]}
+            >
+              <TextInput
+                style={[
+                  styles.linkCodeInput,
+                  { color: colors.text, borderColor: colors.border },
+                ]}
+                value={redeemCode}
+                onChangeText={setRedeemCode}
+                placeholder="Redeem device link code"
+                placeholderTextColor={colors.textTertiary}
+                autoCapitalize="characters"
+                autoCorrect={false}
+              />
+              <TouchableOpacity
+                onPress={handleRedeemLinkCode}
+                disabled={!redeemCode.trim()}
+                style={[
+                  styles.inlineAction,
+                  {
+                    backgroundColor: redeemCode.trim()
+                      ? colors.tint
+                      : `${colors.tint}55`,
+                  },
+                ]}
+              >
+                <Text style={styles.inlineActionText}>Redeem Code</Text>
+              </TouchableOpacity>
+            </View>
+
+            {Platform.OS === 'web' ? (
+              <TouchableOpacity
+                onPress={handleSignOut}
+                style={[
+                  styles.card,
+                  styles.linkRow,
+                  { backgroundColor: colors.surface, borderColor: colors.borderLight },
+                ]}
+                activeOpacity={0.7}
+              >
+                <View style={styles.linkLeft}>
+                  <Ionicons name="log-out-outline" size={20} color={colors.destructive} />
+                  <Text style={[styles.linkText, { color: colors.text }]}>
+                    Sign Out
+                  </Text>
+                </View>
+                <Ionicons
+                  name="chevron-forward"
+                  size={16}
+                  color={colors.textTertiary}
+                />
+              </TouchableOpacity>
+            ) : null}
+          </>
+        ) : null}
 
         <TouchableOpacity
           onPress={initializeCloudSync}
@@ -162,7 +376,7 @@ export default function SettingsScreen() {
         </TouchableOpacity>
 
         <Text style={[styles.sectionNote, { color: colors.textTertiary }]}>
-          Recall now saves locally first and syncs to Firestore when Firebase auth is available.
+          Recall now resolves a stable account before syncing durable data. Anonymous accounts are temporary and should be upgraded on web before using cross-device sync.
         </Text>
         {cloudError ? (
           <Text style={[styles.sectionNote, { color: colors.destructive }]}>
@@ -388,7 +602,8 @@ export default function SettingsScreen() {
 
         <Text style={[styles.sectionNote, { color: colors.textTertiary }]}>
           Synced Apple Books highlights stay in Waiting Approval until you choose a
-          category and approve them.
+          category and approve them. New Apple Books sync requests require a stable
+          account.
         </Text>
         {latestAppleBooksRequest?.resultSummary ? (
           <Text style={[styles.sectionNote, { color: colors.textTertiary }]}>
@@ -577,4 +792,24 @@ const styles = StyleSheet.create({
   },
   linkLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   linkText: { fontSize: 16, fontWeight: '500' },
+  linkCodeInput: {
+    borderWidth: 1,
+    borderRadius: 10,
+    margin: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 16,
+  },
+  inlineAction: {
+    alignSelf: 'flex-end',
+    marginHorizontal: 16,
+    marginBottom: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 10,
+  },
+  inlineActionText: {
+    color: '#fff',
+    fontWeight: '700',
+  },
 });

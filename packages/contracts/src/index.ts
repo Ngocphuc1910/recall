@@ -13,6 +13,21 @@ export type CategoryStatus = 'unset' | 'chosen';
 export type SyncRequestStatus = 'pending' | 'running' | 'completed' | 'failed';
 export type SyncSource = 'apple_books';
 export type ThemePreference = 'light' | 'dark' | 'system';
+export type AccountStatus = 'active' | 'merged' | 'disabled';
+export type MembershipStatus = 'anonymous' | 'active' | 'merged' | 'disabled';
+export type AccountMigrationState =
+  | 'pending_legacy_bootstrap'
+  | 'migrating'
+  | 'complete'
+  | 'not_needed';
+export type LinkCodeStatus = 'pending' | 'redeemed' | 'expired' | 'cancelled';
+export type AuthProviderId =
+  | 'anonymous'
+  | 'google.com'
+  | 'apple.com'
+  | 'password'
+  | 'unknown'
+  | (string & {});
 
 export interface PriorityDefinition {
   code: PriorityCode;
@@ -75,11 +90,66 @@ export interface SyncRequest {
   source: SyncSource;
   status: SyncRequestStatus;
   requestedAt: number;
+  requestedByAuthUid?: string;
+  requestedByProvider?: AuthProviderId;
   startedAt?: number;
   completedAt?: number;
   lastSeenAt?: number;
   resultSummary?: string;
   error?: string;
+}
+
+export interface AccountMembership {
+  accountId: string;
+  providers: AuthProviderId[];
+  primaryProvider: AuthProviderId;
+  email?: string | null;
+  displayName?: string | null;
+  createdAt: number;
+  lastLoginAt: number;
+  status: MembershipStatus;
+}
+
+export interface AccountProfile {
+  createdAt: number;
+  updatedAt: number;
+  ownerAuthUid: string;
+  linkedProviders: AuthProviderId[];
+  migrationState: AccountMigrationState;
+  status: AccountStatus;
+  mergedFromAccountIds?: string[];
+  mergedIntoAccountId?: string;
+  mergedAt?: number;
+}
+
+export interface ResolvedSession {
+  authUid: string;
+  accountId: string;
+  provider: AuthProviderId;
+  isAnonymous: boolean;
+  isStableAccount: boolean;
+}
+
+export interface AccountLinkCode {
+  code: string;
+  targetAccountId: string;
+  createdByAuthUid: string;
+  createdAt: number;
+  expiresAt: number;
+  claimedByAuthUid?: string;
+  claimedAt?: number;
+  status: LinkCodeStatus;
+}
+
+export interface AccountMigrationReport {
+  sourceKind: 'legacy_user' | 'account';
+  sourceId: string;
+  targetAccountId: string;
+  copiedItems: number;
+  copiedStagedHighlights: number;
+  copiedSyncRequests: number;
+  mergedCategories: number;
+  performedAt: number;
 }
 
 export interface Category {

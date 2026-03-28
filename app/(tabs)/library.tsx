@@ -365,9 +365,6 @@ export default function LibraryScreen() {
     </View>
   );
 
-  const heroCopy = hasActiveFilters
-    ? 'Filtered into a tighter reading set so you can find the exact line worth revisiting.'
-    : 'A calm index of everything worth remembering, organized by category, urgency, and source.';
   const compactLayout = width < 720;
   const titleStyle = compactLayout ? styles.titleCompact : styles.title;
   const itemTextStyle = compactLayout ? styles.itemTextCompact : styles.itemText;
@@ -402,11 +399,6 @@ export default function LibraryScreen() {
                 <View style={styles.heroTitleBlock}>
                   <Text style={[titleStyle, { color: colors.text }]}>
                     Library
-                  </Text>
-                  <Text
-                    style={[styles.heroDescription, { color: colors.textSecondary }]}
-                  >
-                    {heroCopy}
                   </Text>
                 </View>
 

@@ -1,8 +1,63 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function membershipDoc() {
+      return get(/databases/$(database)/documents/memberships/$(request.auth.uid));
+    }
+
+    function hasMembership() {
+      return isSignedIn() && membershipDoc().data.accountId != null;
+    }
+
+    function requesterAccountId() {
+      return membershipDoc().data.accountId;
+    }
+
+    match /memberships/{authUid} {
+      allow read: if isSignedIn() && request.auth.uid == authUid;
+      allow create: if isSignedIn()
+        && request.auth.uid == authUid
+        && !exists(/databases/$(database)/documents/memberships/$(authUid))
+        && request.resource.data.accountId is string
+        && request.resource.data.primaryProvider is string
+        && request.resource.data.providers is list
+        && request.resource.data.createdAt is int
+        && request.resource.data.lastLoginAt is int
+        && request.resource.data.status in ['anonymous', 'active'];
+      allow update: if isSignedIn()
+        && request.auth.uid == authUid
+        && resource.data.accountId == request.resource.data.accountId
+        && resource.data.createdAt == request.resource.data.createdAt;
+      allow delete: if false;
+    }
+
+    match /accounts/{accountId}/meta/profile {
+      allow read: if hasMembership() && requesterAccountId() == accountId;
+      allow create: if isSignedIn()
+        && request.resource.data.ownerAuthUid == request.auth.uid
+        && request.resource.data.createdAt is int
+        && request.resource.data.updatedAt is int
+        && request.resource.data.linkedProviders is list
+        && request.resource.data.migrationState in ['pending_legacy_bootstrap', 'migrating', 'complete', 'not_needed']
+        && request.resource.data.status in ['active', 'merged', 'disabled'];
+      allow update: if hasMembership() && requesterAccountId() == accountId;
+      allow delete: if false;
+    }
+
+    match /accounts/{accountId}/{document=**} {
+      allow read, write: if hasMembership() && requesterAccountId() == accountId;
+    }
+
     match /users/{userId}/{document=**} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow read, write: if isSignedIn() && request.auth.uid == userId;
+    }
+
+    match /accountLinkCodes/{codeId} {
+      allow read, write: if false;
     }
   }
 }
