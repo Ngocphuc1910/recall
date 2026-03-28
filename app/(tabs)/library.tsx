@@ -535,12 +535,6 @@ export default function LibraryScreen() {
                 activeOpacity={0.88}
               >
                 <View style={styles.itemLeading}>
-                  <View
-                    style={[
-                      styles.dot,
-                      { backgroundColor: category?.color ?? colors.tint },
-                    ]}
-                  />
                   <View style={styles.itemContent}>
                     <Text
                       style={[itemTextStyle, { color: colors.text }]}

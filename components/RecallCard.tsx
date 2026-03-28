@@ -23,15 +23,17 @@ import { useStore } from '@/lib/store';
 import PriorityBadge from '@/components/PriorityBadge';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
-const SWIPE_THRESHOLD = -120;
+const SWIPE_THRESHOLD = 120;
 
 interface Props {
   item: RecallItem;
   onPress: () => void;
   onRecall: () => void;
+  onForget: () => void;
+  expanded?: boolean;
 }
 
-export default function RecallCard({ item, onPress, onRecall }: Props) {
+export default function RecallCard({ item, onPress, onRecall, onForget, expanded }: Props) {
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme];
   const category = useStore((s) => s.getCategoryById(item.categoryId));
@@ -41,12 +43,16 @@ export default function RecallCard({ item, onPress, onRecall }: Props) {
   const panGesture = Gesture.Pan()
     .activeOffsetX([-15, 15])
     .onUpdate((e) => {
-      translateX.value = Math.min(0, e.translationX);
+      translateX.value = e.translationX;
     })
     .onEnd(() => {
-      if (translateX.value < SWIPE_THRESHOLD) {
+      if (translateX.value < -SWIPE_THRESHOLD) {
         translateX.value = withTiming(-SCREEN_WIDTH, { duration: 250 }, () => {
           runOnJS(onRecall)();
+        });
+      } else if (translateX.value > SWIPE_THRESHOLD) {
+        translateX.value = withTiming(SCREEN_WIDTH, { duration: 250 }, () => {
+          runOnJS(onForget)();
         });
       } else {
         translateX.value = withSpring(0, { damping: 20, stiffness: 200 });
@@ -57,21 +63,47 @@ export default function RecallCard({ item, onPress, onRecall }: Props) {
     transform: [{ translateX: translateX.value }],
   }));
 
-  const bgAnimatedStyle = useAnimatedStyle(() => ({
+  // Recall background (right side, revealed by left swipe)
+  const recallBgStyle = useAnimatedStyle(() => ({
     opacity: interpolate(
-      Math.abs(translateX.value),
+      -translateX.value,
       [0, 60, 120],
-      [0, 0.5, 1]
+      [0, 0.5, 1],
+      'clamp'
     ),
   }));
 
-  const checkScale = useAnimatedStyle(() => ({
+  const recallIconScale = useAnimatedStyle(() => ({
     transform: [
       {
         scale: interpolate(
-          Math.abs(translateX.value),
+          -translateX.value,
           [0, 80, 120],
-          [0.5, 0.8, 1.2]
+          [0.5, 0.8, 1.2],
+          'clamp'
+        ),
+      },
+    ],
+  }));
+
+  // Forget background (left side, revealed by right swipe)
+  const forgetBgStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(
+      translateX.value,
+      [0, 60, 120],
+      [0, 0.5, 1],
+      'clamp'
+    ),
+  }));
+
+  const forgetIconScale = useAnimatedStyle(() => ({
+    transform: [
+      {
+        scale: interpolate(
+          translateX.value,
+          [0, 80, 120],
+          [0.5, 0.8, 1.2],
+          'clamp'
         ),
       },
     ],
@@ -79,17 +111,34 @@ export default function RecallCard({ item, onPress, onRecall }: Props) {
 
   return (
     <View style={styles.wrapper}>
+      {/* Recall background — left swipe */}
       <Animated.View
         style={[
           styles.swipeBackground,
+          styles.swipeBackgroundRight,
           { backgroundColor: colors.success },
-          bgAnimatedStyle,
+          recallBgStyle,
         ]}
       >
-        <Animated.View style={checkScale}>
+        <Animated.View style={recallIconScale}>
           <Ionicons name="checkmark-circle" size={32} color="#fff" />
         </Animated.View>
         <Text style={styles.swipeText}>Recalled</Text>
+      </Animated.View>
+
+      {/* Forget background — right swipe */}
+      <Animated.View
+        style={[
+          styles.swipeBackground,
+          styles.swipeBackgroundLeft,
+          { backgroundColor: colors.destructive ?? '#EF4444' },
+          forgetBgStyle,
+        ]}
+      >
+        <Text style={styles.swipeText}>Forgotten</Text>
+        <Animated.View style={forgetIconScale}>
+          <Ionicons name="refresh-circle" size={32} color="#fff" />
+        </Animated.View>
       </Animated.View>
 
       <GestureDetector gesture={panGesture}>
@@ -110,16 +159,10 @@ export default function RecallCard({ item, onPress, onRecall }: Props) {
             style={styles.cardInner}
           >
             <View style={styles.itemLeading}>
-              <View
-                style={[
-                  styles.dot,
-                  { backgroundColor: category?.color ?? colors.tint },
-                ]}
-              />
               <View style={styles.itemContent}>
                 <Text
                   style={[styles.contentText, { color: colors.text }]}
-                  numberOfLines={2}
+                  numberOfLines={expanded ? undefined : 2}
                 >
                   {item.content}
                 </Text>
@@ -196,9 +239,15 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 8,
+  },
+  swipeBackgroundRight: {
     justifyContent: 'flex-end',
     paddingRight: 24,
-    gap: 8,
+  },
+  swipeBackgroundLeft: {
+    justifyContent: 'flex-start',
+    paddingLeft: 24,
   },
   swipeText: {
     color: '#fff',
@@ -220,12 +269,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 12,
-  },
-  dot: {
-    width: 9,
-    height: 9,
-    borderRadius: 4.5,
-    marginTop: 8,
   },
   itemContent: {
     flex: 1,

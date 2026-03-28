@@ -25,9 +25,14 @@ export default function Root({ children }: { children: React.ReactNode }) {
 const responsiveBackground = `
 body {
   background-color: #FFFFFF;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: none;
 }
 @media (prefers-color-scheme: dark) {
   body {
     background-color: #000;
   }
+}
+* {
+  -webkit-tap-highlight-color: transparent;
 }`;

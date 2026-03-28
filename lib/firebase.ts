@@ -6,13 +6,17 @@ import {
   OAuthProvider,
   User,
   getAuth,
+  getRedirectResult,
   linkWithCredential,
   linkWithPopup,
+  linkWithRedirect,
   onAuthStateChanged,
   onIdTokenChanged,
+  reload,
   signInAnonymously,
   signInWithCredential,
   signInWithPopup,
+  signInWithRedirect,
   signOut,
 } from 'firebase/auth';
 import {
@@ -50,7 +54,7 @@ import { buildImportDedupKey } from './import';
 
 const firebaseConfig = {
   apiKey: 'AIzaSyBBhmqhwgAhvzmgXobBPcIbLaIquj5TlwY',
-  authDomain: 'recall-memory-20260326.firebaseapp.com',
+  authDomain: getWebAuthDomain(),
   projectId: 'recall-memory-20260326',
   storageBucket: 'recall-memory-20260326.firebasestorage.app',
   messagingSenderId: '1038616079340',
@@ -69,6 +73,8 @@ let signInPromise: Promise<User> | null = null;
 let lastResolvedAuthKey: string | null = null;
 let resolvedSessionPromise: Promise<ResolvedSession> | null = null;
 let googlePopupInProgress = false;
+let redirectResultPromise: Promise<void> | null = null;
+let lastRedirectError: unknown = null;
 const migratedLegacyUids = new Set<string>();
 
 function getOrCreateAuth(): Auth {
@@ -76,6 +82,8 @@ function getOrCreateAuth(): Auth {
 }
 
 export async function ensureSignedIn(): Promise<User> {
+  await maybeHandleRedirectResult();
+
   if (auth.currentUser) {
     return auth.currentUser;
   }
@@ -134,7 +142,19 @@ export async function startGooglePopupAuth() {
     throw new Error('Google sign-in is only available on web.');
   }
 
+  await maybeHandleRedirectResult();
+
   if (googlePopupInProgress) {
+    return;
+  }
+
+  if (shouldUseGoogleRedirectAuth()) {
+    if (auth.currentUser?.isAnonymous) {
+      await linkWithRedirect(auth.currentUser, googleProvider);
+      return;
+    }
+
+    await signInWithRedirect(auth, googleProvider);
     return;
   }
 
@@ -173,7 +193,14 @@ export async function startGooglePopupSignIn() {
     throw new Error('Google sign-in is only available on web.');
   }
 
+  await maybeHandleRedirectResult();
+
   if (googlePopupInProgress) {
+    return;
+  }
+
+  if (shouldUseGoogleRedirectAuth()) {
+    await signInWithRedirect(auth, googleProvider);
     return;
   }
 
@@ -251,6 +278,55 @@ export async function createAccountLinkCode() {
   const callable = httpsCallable<void, AccountLinkCode>(functions, 'createAccountLinkCode');
   const result = await callable();
   return result.data;
+}
+
+function getWebAuthDomain() {
+  if (
+    typeof window !== 'undefined' &&
+    window.location.hostname === 'learnwise.online'
+  ) {
+    return 'learnwise.online';
+  }
+
+  return 'recall-memory-20260326.firebaseapp.com';
+}
+
+function shouldUseGoogleRedirectAuth() {
+  if (Platform.OS !== 'web' || typeof navigator === 'undefined') {
+    return false;
+  }
+
+  const userAgent = navigator.userAgent ?? '';
+  const touchMac =
+    typeof navigator.maxTouchPoints === 'number' &&
+    navigator.platform === 'MacIntel' &&
+    navigator.maxTouchPoints > 1;
+
+  return /Android|webOS|iPhone|iPad|iPod|Mobile/i.test(userAgent) || touchMac;
+}
+
+async function maybeHandleRedirectResult() {
+  if (Platform.OS !== 'web') {
+    return;
+  }
+
+  if (!redirectResultPromise) {
+    redirectResultPromise = getRedirectResult(auth)
+      .then(async (result) => {
+        if (result?.user) {
+          await reload(result.user);
+        } else if (auth.currentUser) {
+          await reload(auth.currentUser);
+        }
+        lastResolvedAuthKey = null;
+        resolvedSessionPromise = null;
+      })
+      .catch((error) => {
+        lastRedirectError = error;
+      });
+  }
+
+  await redirectResultPromise;
 }
 
 export async function redeemAccountLinkCode(code: string) {
@@ -774,6 +850,11 @@ function getRecallItemDedupKey(item: RecallItem) {
 }
 
 export function getFirebaseErrorMessage(error: unknown): string {
+  if (lastRedirectError) {
+    error = lastRedirectError;
+    lastRedirectError = null;
+  }
+
   if (
     typeof error === 'object' &&
     error !== null &&

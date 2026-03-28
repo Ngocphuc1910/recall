@@ -10,6 +10,7 @@ import React, {
 import {
   NativeScrollEvent,
   NativeSyntheticEvent,
+  Platform,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 
@@ -106,6 +107,12 @@ export function useTabBarScrollHandler() {
     },
     [hideTabBar, showTabBar]
   );
+
+  // On web, skip the JS scroll handler entirely — it blocks native scroll
+  // momentum on Safari and causes jank. The tab bar stays always visible.
+  if (Platform.OS === 'web') {
+    return {};
+  }
 
   return {
     onScroll,

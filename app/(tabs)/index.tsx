@@ -79,6 +79,7 @@ export default function TodayScreen() {
   const categories = useStore((s) => s.categories);
   const addItem = useStore((s) => s.addItem);
   const markRecalled = useStore((s) => s.markRecalled);
+  const markForgotten = useStore((s) => s.markForgotten);
   const webViewportMode = useStore(
     (s) => s.settings.webViewportMode ?? 'desktop'
   );
@@ -87,6 +88,7 @@ export default function TodayScreen() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [filterMode, setFilterMode] = useState<'today' | 'week' | 'month' | 'pastdue'>('today');
   const [showFilterMenu, setShowFilterMenu] = useState(false);
+  const [expandedCards, setExpandedCards] = useState(false);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [selectedPriorities, setSelectedPriorities] = useState<PriorityCode[]>([]);
   const [selectedSources, setSelectedSources] = useState<string[]>([]);
@@ -634,6 +636,25 @@ export default function TodayScreen() {
           ) : null}
 
           <TouchableOpacity
+            onPress={() => setExpandedCards(!expandedCards)}
+            hitSlop={10}
+            style={[
+              styles.filterButton,
+              {
+                backgroundColor: expandedCards ? colors.tint + '15' : colors.surface,
+                borderColor: expandedCards ? colors.tint + '30' : colors.border,
+              },
+            ]}
+            activeOpacity={0.8}
+          >
+            <Ionicons
+              name={expandedCards ? 'contract-outline' : 'expand-outline'}
+              size={18}
+              color={expandedCards ? colors.tint : colors.textSecondary}
+            />
+          </TouchableOpacity>
+
+          <TouchableOpacity
             onPress={() => setShowFilterMenu(!showFilterMenu)}
             hitSlop={10}
             style={[
@@ -717,6 +738,8 @@ export default function TodayScreen() {
                 })
               }
               onRecall={() => markRecalled(item.id)}
+              onForget={() => markForgotten(item.id)}
+              expanded={expandedCards}
             />
           )}
           contentContainerStyle={styles.list}
