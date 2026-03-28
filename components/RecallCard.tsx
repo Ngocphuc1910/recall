@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { useMemo, useRef } from 'react';
 import {
   StyleSheet,
   Text,
   View,
   TouchableOpacity,
   Dimensions,
+  PanResponder,
   Platform,
   useColorScheme,
 } from 'react-native';
@@ -43,6 +44,7 @@ export default function RecallCard({ item, onPress, onRecall, onForget, expanded
 
   const panGesture = Gesture.Pan()
     .activeOffsetX([-15, 15])
+    .failOffsetY([-10, 10])
     .onUpdate((e) => {
       translateX.value = e.translationX;
     })
@@ -178,23 +180,84 @@ export default function RecallCard({ item, onPress, onRecall, onForget, expanded
     </TouchableOpacity>
   );
 
-  // On web, skip the GestureDetector entirely — the Pan gesture intercepts
-  // touch events on Safari and blocks native vertical scrolling in FlatList.
-  // Swipe-to-recall/forget is a native-only interaction.
+  // On web, use PanResponder instead of RNGH GestureDetector.
+  // PanResponder properly negotiates with ScrollView/FlatList:
+  // onMoveShouldSetPanResponder only claims the touch when horizontal
+  // movement dominates, so vertical scrolling continues to work.
+  const callbacksRef = useRef({ onRecall, onForget });
+  callbacksRef.current = { onRecall, onForget };
+
+  const webPanResponder = useMemo(() => {
+    if (Platform.OS !== 'web') return null;
+    return PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_, { dx, dy }) =>
+        Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 10,
+      onPanResponderMove: (_, { dx }) => {
+        translateX.value = dx;
+      },
+      onPanResponderRelease: (_, { dx }) => {
+        if (dx < -SWIPE_THRESHOLD) {
+          translateX.value = withTiming(-SCREEN_WIDTH, { duration: 250 }, () => {
+            callbacksRef.current.onRecall();
+          });
+        } else if (dx > SWIPE_THRESHOLD) {
+          translateX.value = withTiming(SCREEN_WIDTH, { duration: 250 }, () => {
+            callbacksRef.current.onForget();
+          });
+        } else {
+          translateX.value = withSpring(0, { damping: 20, stiffness: 200 });
+        }
+      },
+      onPanResponderTerminationRequest: () => false,
+    });
+  }, []);
+
   if (Platform.OS === 'web') {
     return (
       <View style={styles.wrapper}>
-        <View
+        <Animated.View
           style={[
-            styles.card,
-            {
-              backgroundColor: colors.surface,
-              shadowColor: colors.shadow,
-              borderColor: colors.borderLight,
-            },
+            styles.swipeBackground,
+            styles.swipeBackgroundRight,
+            { backgroundColor: colors.success },
+            recallBgStyle,
           ]}
         >
-          {cardContent}
+          <Animated.View style={recallIconScale}>
+            <Ionicons name="checkmark-circle" size={32} color="#fff" />
+          </Animated.View>
+          <Text style={styles.swipeText}>Recalled</Text>
+        </Animated.View>
+
+        <Animated.View
+          style={[
+            styles.swipeBackground,
+            styles.swipeBackgroundLeft,
+            { backgroundColor: colors.destructive ?? '#EF4444' },
+            forgetBgStyle,
+          ]}
+        >
+          <Text style={styles.swipeText}>Forgotten</Text>
+          <Animated.View style={forgetIconScale}>
+            <Ionicons name="refresh-circle" size={32} color="#fff" />
+          </Animated.View>
+        </Animated.View>
+
+        <View {...webPanResponder!.panHandlers}>
+          <Animated.View
+            style={[
+              styles.card,
+              {
+                backgroundColor: colors.surface,
+                shadowColor: colors.shadow,
+                borderColor: colors.borderLight,
+              },
+              cardAnimatedStyle,
+            ]}
+          >
+            {cardContent}
+          </Animated.View>
         </View>
       </View>
     );

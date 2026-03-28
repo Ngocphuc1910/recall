@@ -20,7 +20,29 @@ import EmptyState from '@/components/EmptyState';
 import PriorityBadge from '@/components/PriorityBadge';
 import PriorityPicker from '@/components/PriorityPicker';
 import { useStore } from '@/lib/store';
+import { ImportResult } from '@/lib/import';
 import { PriorityCode, StagedHighlight } from '@/lib/types';
+
+const SAMPLE_JSON = `{
+  "version": 1,
+  "source": {
+    "provider": "apple_books",
+    "bookTitle": "Deep Work",
+    "assetId": "book-asset-id"
+  },
+  "items": [
+    {
+      "externalId": "highlight-1",
+      "content": "Clarity about what matters provides clarity about what does not.",
+      "detail": "Chapter 1",
+      "meta": {
+        "locationCfi": "epubcfi(/6/14!/4/2/10)",
+        "highlightedAt": "2026-02-25T08:15:00Z",
+        "style": 1
+      }
+    }
+  ]
+}`;
 
 export default function WaitingApprovalScreen() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -30,12 +52,59 @@ export default function WaitingApprovalScreen() {
   const stagedHighlights = useStore((s) => s.stagedHighlights);
   const syncRequests = useStore((s) => s.syncRequests);
   const requestAppleBooksSync = useStore((s) => s.requestAppleBooksSync);
+  const bulkImportFromJson = useStore((s) => s.bulkImportFromJson);
   const updateStagedHighlightFields = useStore((s) => s.updateStagedHighlightFields);
   const approveStagedHighlight = useStore((s) => s.approveStagedHighlight);
   const rejectStagedHighlight = useStore((s) => s.rejectStagedHighlight);
   const approveAllPendingStagedHighlights = useStore((s) => s.approveAllPendingStagedHighlights);
   const rejectAllPendingStagedHighlights = useStore((s) => s.rejectAllPendingStagedHighlights);
   const setPendingHighlightsCategory = useStore((s) => s.setPendingHighlightsCategory);
+
+  const [showBulkAdd, setShowBulkAdd] = useState(false);
+  const [jsonText, setJsonText] = useState('');
+  const [importPreview, setImportPreview] = useState<ImportResult | null>(null);
+  const [lastImport, setLastImport] = useState<ImportResult | null>(null);
+  const [importing, setImporting] = useState(false);
+
+  const canValidate = jsonText.trim().length > 0;
+  const canImport = !!importPreview && importPreview.errors.length === 0 && importPreview.valid > 0 && !importing;
+
+  const previewTitle = importPreview
+    ? importPreview.errors.length > 0 ? 'Validation failed' : 'Validation summary'
+    : 'No preview yet';
+
+  const handleBulkValidate = async () => {
+    const result = await bulkImportFromJson(jsonText, { dryRun: true });
+    setImportPreview(result);
+    setLastImport(null);
+  };
+
+  const handleBulkImport = async () => {
+    if (!canImport) return;
+    setImporting(true);
+    try {
+      const result = await bulkImportFromJson(jsonText);
+      setImportPreview(result);
+      setLastImport(result);
+      if (result.errors.length === 0) {
+        setShowBulkAdd(false);
+        setJsonText('');
+        setImportPreview(null);
+        setLastImport(null);
+      }
+    } catch (e) {
+      notify(getErrorMessage(e), true);
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const closeBulkAdd = () => {
+    setShowBulkAdd(false);
+    setJsonText('');
+    setImportPreview(null);
+    setLastImport(null);
+  };
 
   const [editingHighlight, setEditingHighlight] = useState<StagedHighlight | null>(null);
   const [editContent, setEditContent] = useState('');
@@ -148,20 +217,30 @@ export default function WaitingApprovalScreen() {
       >
         <View style={styles.pageHeader}>
           <Text style={[styles.title, { color: colors.text }]}>Approval</Text>
-          <TouchableOpacity
-            onPress={handleSyncRequest}
-            disabled={syncInFlight}
-            style={[
-              styles.syncButton,
-              { backgroundColor: syncInFlight ? colors.tint + '40' : colors.tint },
-            ]}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="sync-outline" size={16} color="#fff" />
-            <Text style={styles.syncButtonText}>
-              {syncInFlight ? 'Syncing…' : 'Sync Books'}
-            </Text>
-          </TouchableOpacity>
+          <View style={styles.headerButtons}>
+            <TouchableOpacity
+              onPress={handleSyncRequest}
+              disabled={syncInFlight}
+              style={[
+                styles.syncButton,
+                { backgroundColor: syncInFlight ? colors.tint + '40' : colors.tint },
+              ]}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="sync-outline" size={16} color="#fff" />
+              <Text style={styles.syncButtonText}>
+                {syncInFlight ? 'Syncing…' : 'Sync Books'}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setShowBulkAdd(true)}
+              style={[styles.syncButton, { backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border }]}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="add-outline" size={16} color={colors.text} />
+              <Text style={[styles.syncButtonText, { color: colors.text }]}>Bulk Add</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         <View style={styles.sectionHeader}>
@@ -402,6 +481,129 @@ export default function WaitingApprovalScreen() {
           </KeyboardAvoidingView>
         </View>
       </Modal>
+
+      {/* Bulk Add Modal */}
+      <Modal visible={showBulkAdd} transparent animationType="slide" onRequestClose={closeBulkAdd}>
+        <View style={styles.modalOverlay}>
+          <Pressable style={styles.modalBackdrop} onPress={closeBulkAdd} />
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalKeyboard}>
+            <View style={[styles.modalCard, { backgroundColor: colors.surface, shadowColor: colorScheme === 'dark' ? '#000' : '#111d2d' }]}>
+              <View style={[styles.modalHeader, { borderBottomColor: colors.borderLight }]}>
+                <View>
+                  <Text style={[styles.modalTitle, { color: colors.text }]}>Bulk Import JSON</Text>
+                  <Text style={[styles.bulkAddSubtitle, { color: colors.textSecondary }]}>
+                    Paste a highlights payload, validate, then stage for review.
+                  </Text>
+                </View>
+                <TouchableOpacity onPress={closeBulkAdd}>
+                  <Ionicons name="close" size={24} color={colors.textSecondary} />
+                </TouchableOpacity>
+              </View>
+              <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.bulkScrollContent}>
+
+                {/* JSON Payload card */}
+                <View style={[styles.bulkCard, { backgroundColor: colors.elevated, borderColor: colors.borderLight }]}>
+                  <Text style={[styles.bulkCardTitle, { color: colors.textSecondary }]}>JSON PAYLOAD</Text>
+                  <TextInput
+                    style={[styles.jsonInput, { color: colors.text, backgroundColor: colors.background, borderColor: colors.border }]}
+                    value={jsonText}
+                    onChangeText={(text) => { setJsonText(text); setImportPreview(null); setLastImport(null); }}
+                    placeholder={SAMPLE_JSON}
+                    placeholderTextColor={colors.textTertiary}
+                    multiline
+                    textAlignVertical="top"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                  />
+                  <View style={styles.bulkActions}>
+                    <TouchableOpacity
+                      onPress={() => { setJsonText(SAMPLE_JSON); setImportPreview(null); setLastImport(null); }}
+                      style={[styles.secondaryButton, { borderColor: colors.border, backgroundColor: colors.background }]}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={[styles.secondaryButtonText, { color: colors.text }]}>Use Sample</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={handleBulkValidate}
+                      disabled={!canValidate}
+                      style={[styles.primaryButton, { backgroundColor: canValidate ? colors.tint : colors.tint + '40' }]}
+                      activeOpacity={0.8}
+                    >
+                      <Ionicons name="checkmark-circle-outline" size={18} color="#fff" />
+                      <Text style={styles.primaryButtonText}>Validate</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                {/* Preview card */}
+                <View style={[styles.bulkCard, { backgroundColor: colors.elevated, borderColor: colors.borderLight }]}>
+                  <Text style={[styles.bulkCardTitle, { color: colors.textSecondary }]}>{previewTitle.toUpperCase()}</Text>
+
+                  {importPreview ? (
+                    <>
+                      <BulkSummaryRow label="Total rows" value={String(importPreview.total)} colors={colors} />
+                      <BulkSummaryRow label="Valid rows" value={String(importPreview.valid)} colors={colors} />
+                      <BulkSummaryRow label="Invalid rows" value={String(importPreview.skippedInvalid)} colors={colors} />
+                      <BulkSummaryRow label="Duplicate rows" value={String(importPreview.skippedDuplicates)} colors={colors} />
+                      <BulkSummaryRow label="Ready to import" value={String(importPreview.imported)} colors={colors} />
+
+                      {importPreview.invalidRows.length > 0 && (
+                        <View style={styles.bulkBlock}>
+                          <Text style={[styles.bulkBlockTitle, { color: colors.textSecondary }]}>Invalid Rows</Text>
+                          {importPreview.invalidRows.slice(0, 8).map((row) => (
+                            <Text key={`${row.rowIndex}-${row.reason}`} style={[styles.bulkBlockLine, { color: colors.destructive }]}>
+                              Row {row.rowIndex}: {row.reason}
+                            </Text>
+                          ))}
+                        </View>
+                      )}
+                      {importPreview.errors.length > 0 && (
+                        <View style={styles.bulkBlock}>
+                          <Text style={[styles.bulkBlockTitle, { color: colors.textSecondary }]}>Errors</Text>
+                          {importPreview.errors.map((error) => (
+                            <Text key={error} style={[styles.bulkBlockLine, { color: colors.destructive }]}>{error}</Text>
+                          ))}
+                        </View>
+                      )}
+                      {importPreview.warnings.length > 0 && (
+                        <View style={styles.bulkBlock}>
+                          <Text style={[styles.bulkBlockTitle, { color: colors.textSecondary }]}>Warnings</Text>
+                          {importPreview.warnings.slice(0, 8).map((warning) => (
+                            <Text key={warning} style={[styles.bulkBlockLine, { color: colors.warning }]}>{warning}</Text>
+                          ))}
+                        </View>
+                      )}
+                    </>
+                  ) : (
+                    <Text style={[styles.bulkEmptyText, { color: colors.textTertiary }]}>
+                      Validate JSON to preview valid, invalid, and duplicate counts.
+                    </Text>
+                  )}
+
+                  <TouchableOpacity
+                    onPress={handleBulkImport}
+                    disabled={!canImport}
+                    style={[styles.importButton, { backgroundColor: canImport ? colors.success : colors.success + '55' }]}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="cloud-upload-outline" size={20} color="#fff" />
+                    <Text style={styles.importButtonText}>{importing ? 'Staging…' : 'Stage for Review'}</Text>
+                  </TouchableOpacity>
+
+                  {lastImport && lastImport.errors.length === 0 && (
+                    <Text style={[styles.bulkFooterNote, { color: colors.textTertiary }]}>
+                      {lastImport.imported} item{lastImport.imported !== 1 ? 's' : ''} staged for review
+                      {lastImport.skippedDuplicates > 0 ? `, ${lastImport.skippedDuplicates} duplicates skipped` : ''}
+                      {lastImport.skippedInvalid > 0 ? `, ${lastImport.skippedInvalid} invalid skipped` : ''}.
+                    </Text>
+                  )}
+                </View>
+
+              </ScrollView>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
     </>
   );
 }
@@ -435,9 +637,6 @@ function ApprovalCard({
       {/* Header row */}
       <View style={styles.cardTopRow}>
         <View style={styles.cardLeading}>
-          {category ? (
-            <View style={[styles.dot, { backgroundColor: category.color }]} />
-          ) : null}
           <View style={styles.cardMeta}>
             <Text style={[styles.highlightSource, { color: colors.text }]} numberOfLines={1}>
               {highlight.source || 'Unknown source'}
@@ -616,6 +815,11 @@ const styles = StyleSheet.create({
   },
   cardTitle: { fontSize: 18, fontWeight: '600' },
 
+  headerButtons: {
+    flexDirection: 'column',
+    alignItems: 'flex-end',
+    gap: 8,
+  },
   syncButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -625,6 +829,15 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   syncButtonText: { color: '#fff', fontSize: 14, fontWeight: '600' },
+  bulkAddLabel: { fontSize: 12, fontWeight: '600', letterSpacing: 0.5, marginBottom: 6 },
+  bulkAddInput: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 16,
+  },
+  bulkAddTextArea: { minHeight: 180 },
 
   sectionHeader: {
     flexDirection: 'row',
