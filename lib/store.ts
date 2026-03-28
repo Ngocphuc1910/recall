@@ -26,7 +26,7 @@ import {
   redeemAccountLinkCode as redeemLinkCode,
   signOutCurrentUser,
   startAppleSignIn,
-  startGoogleRedirectAuth,
+  startGooglePopupAuth,
   subscribeToResolvedSession,
 } from './firebase';
 import {
@@ -627,7 +627,7 @@ export const useStore = create<RecallStore>()(
       },
 
       startGoogleUpgrade: async () => {
-        await startGoogleRedirectAuth();
+        await startGooglePopupAuth();
       },
 
       startAppleUpgrade: async () => {

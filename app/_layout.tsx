@@ -226,7 +226,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   appContentPhonePreview: {
-    paddingTop: 40,
+    paddingTop: 16,
     paddingBottom: 8,
     paddingHorizontal: 10,
   },

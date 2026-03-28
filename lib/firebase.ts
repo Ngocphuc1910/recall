@@ -68,6 +68,7 @@ export const functions = getFunctions(app, 'asia-southeast1');
 let signInPromise: Promise<User> | null = null;
 let lastResolvedAuthKey: string | null = null;
 let resolvedSessionPromise: Promise<ResolvedSession> | null = null;
+let googlePopupInProgress = false;
 const migratedLegacyUids = new Set<string>();
 
 function getOrCreateAuth(): Auth {
@@ -75,8 +76,6 @@ function getOrCreateAuth(): Auth {
 }
 
 export async function ensureSignedIn(): Promise<User> {
-  await maybeHandleRedirectResult();
-
   if (auth.currentUser) {
     return auth.currentUser;
   }
@@ -130,19 +129,43 @@ export function subscribeToResolvedSession(
   });
 }
 
-export async function startGoogleRedirectAuth() {
+export async function startGooglePopupAuth() {
   if (Platform.OS !== 'web') {
-    throw new Error('Google redirect auth is only available on web.');
+    throw new Error('Google sign-in is only available on web.');
   }
 
-  await maybeHandleRedirectResult();
-
-  if (auth.currentUser?.isAnonymous) {
-    await linkWithRedirect(auth.currentUser, googleProvider);
+  if (googlePopupInProgress) {
     return;
   }
 
-  await signInWithRedirect(auth, googleProvider);
+  googlePopupInProgress = true;
+  try {
+    if (auth.currentUser?.isAnonymous) {
+      try {
+        await linkWithPopup(auth.currentUser, googleProvider);
+      } catch (error: any) {
+        if (error?.code === 'auth/cancelled-popup-request' || error?.code === 'auth/popup-closed-by-user') {
+          return;
+        } else {
+          throw error;
+        }
+      }
+    } else {
+      try {
+        await signInWithPopup(auth, googleProvider);
+      } catch (error: any) {
+        if (error?.code === 'auth/cancelled-popup-request' || error?.code === 'auth/popup-closed-by-user') {
+          return;
+        }
+        throw error;
+      }
+    }
+
+    lastResolvedAuthKey = null;
+    resolvedSessionPromise = null;
+  } finally {
+    googlePopupInProgress = false;
+  }
 }
 
 export async function startAppleSignIn() {
@@ -270,30 +293,6 @@ export function getLegacyUserStagedHighlightsCollection(uid: string) {
 
 export function getLegacyUserSyncRequestsCollection(uid: string) {
   return collection(db, 'users', uid, 'syncRequests');
-}
-
-async function maybeHandleRedirectResult() {
-  if (Platform.OS !== 'web') {
-    return;
-  }
-
-  if (!redirectResultPromise) {
-    redirectResultPromise = getRedirectResult(auth)
-      .then(async (result) => {
-        if (result?.user) {
-          await reload(result.user);
-        } else if (auth.currentUser) {
-          await reload(auth.currentUser);
-        }
-        lastResolvedAuthKey = null;
-        resolvedSessionPromise = null;
-      })
-      .catch((error) => {
-        lastRedirectError = error;
-      });
-  }
-
-  await redirectResultPromise;
 }
 
 async function resolveOrCreateSession(user: User): Promise<ResolvedSession> {
@@ -744,11 +743,6 @@ function getRecallItemDedupKey(item: RecallItem) {
 }
 
 export function getFirebaseErrorMessage(error: unknown): string {
-  if (lastRedirectError) {
-    error = lastRedirectError;
-    lastRedirectError = null;
-  }
-
   if (
     typeof error === 'object' &&
     error !== null &&
@@ -766,6 +760,8 @@ export function getFirebaseErrorMessage(error: unknown): string {
         return 'Google sign-in was cancelled before it finished.';
       case 'auth/account-exists-with-different-credential':
         return 'This email is already linked to a different sign-in method.';
+      case 'auth/credential-already-in-use':
+        return 'This Google account is already linked to another Recall account.';
       case 'auth/missing-or-invalid-nonce':
         return 'Apple sign-in could not be verified. Try again.';
       case 'auth/provider-already-linked':
