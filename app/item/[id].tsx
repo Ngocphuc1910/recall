@@ -2,6 +2,7 @@ import React from 'react';
 import {
   Animated,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -17,6 +18,7 @@ import Colors from '@/constants/Colors';
 import { useStore } from '@/lib/store';
 import { getIntervalLabel } from '@/lib/srs';
 import PriorityBadge from '@/components/PriorityBadge';
+import { WebPortal } from '@/components/WebPortal';
 import {
   PRIORITY_DEFINITIONS,
   PriorityCode,
@@ -65,6 +67,7 @@ export default function ItemDetailScreen() {
   const colors = Colors[colorScheme];
   const router = useRouter();
   const { width } = useWindowDimensions();
+  const isWeb = Platform.OS === 'web';
   const [showDetailsSheet, setShowDetailsSheet] = React.useState(false);
   const [priorityMenuOpen, setPriorityMenuOpen] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
@@ -817,20 +820,19 @@ export default function ItemDetailScreen() {
 
       {loading ? renderSkeleton() : renderFocusReview()}
 
-      <Modal
-        visible={showDetailsSheet}
-        animationType="fade"
-        transparent
-        onRequestClose={closeDetailsSheet}
-      >
-        {renderDetailsSheet()}
-      </Modal>
+      <WebPortal visible={isWeb && showDetailsSheet}>{renderDetailsSheet()}</WebPortal>
+      {!isWeb && (
+        <Modal visible={showDetailsSheet} animationType="fade" transparent onRequestClose={closeDetailsSheet}>
+          {renderDetailsSheet()}
+        </Modal>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  webModalRoot: { ...StyleSheet.absoluteFillObject, zIndex: 20 },
   backdrop: {
     ...StyleSheet.absoluteFillObject,
     overflow: 'hidden',
@@ -904,11 +906,11 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   sheetCard: {
+    flex: 1,
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     borderWidth: StyleSheet.hairlineWidth,
     borderBottomWidth: 0,
-    maxHeight: '74%',
     overflow: 'hidden',
     shadowOffset: { width: 0, height: -10 },
     shadowOpacity: 0.18,

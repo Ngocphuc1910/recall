@@ -24,6 +24,7 @@ import EmptyState from '@/components/EmptyState';
 import CategoryPicker from '@/components/CategoryPicker';
 import PriorityPicker from '@/components/PriorityPicker';
 import { DEFAULT_PRIORITY_CODE, PRIORITY_DEFINITIONS, PriorityCode } from '@/lib/types';
+import { WebPortal } from '@/components/WebPortal';
 
 interface FilterChipProps {
   label: string;
@@ -778,32 +779,16 @@ export default function TodayScreen() {
         <Ionicons name="add" size={28} color="#fff" />
       </TouchableOpacity>
 
-      {isWeb ? (
-        showAddModal ? (
-          <View style={styles.webModalRoot}>{renderAddOverlay()}</View>
-        ) : null
-      ) : (
-        <Modal
-          visible={showAddModal}
-          animationType="slide"
-          transparent
-          onRequestClose={closeAddModal}
-        >
+      <WebPortal visible={isWeb && showAddModal}>{renderAddOverlay()}</WebPortal>
+      {!isWeb && (
+        <Modal visible={showAddModal} animationType="slide" transparent onRequestClose={closeAddModal}>
           {renderAddOverlay()}
         </Modal>
       )}
 
-      {isWeb ? (
-        showFilterMenu ? (
-          <View style={styles.webModalRoot}>{renderFilterSheet()}</View>
-        ) : null
-      ) : (
-        <Modal
-          visible={showFilterMenu}
-          animationType="fade"
-          transparent
-          onRequestClose={() => setShowFilterMenu(false)}
-        >
+      <WebPortal visible={isWeb && showFilterMenu}>{renderFilterSheet()}</WebPortal>
+      {!isWeb && (
+        <Modal visible={showFilterMenu} animationType="fade" transparent onRequestClose={() => setShowFilterMenu(false)}>
           {renderFilterSheet()}
         </Modal>
       )}
@@ -1031,6 +1016,7 @@ const styles = StyleSheet.create({
     zIndex: 20,
   },
   modalCard: {
+    flex: 1,
     width: '100%',
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,

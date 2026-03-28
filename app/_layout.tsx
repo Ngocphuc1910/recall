@@ -190,6 +190,12 @@ function RootLayoutNav() {
                 ]}
               >
                 {appContent}
+                {/* Portal target: sits above tab bar, clipped to phone bounds */}
+                <View
+                  nativeID="phone-overlay-root"
+                  style={StyleSheet.absoluteFillObject}
+                  pointerEvents="box-none"
+                />
               </View>
               <View pointerEvents="none" style={styles.phoneMockupFrame}>
                 <Image

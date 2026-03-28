@@ -21,6 +21,7 @@ import PriorityBadge from '@/components/PriorityBadge';
 import { useStore } from '@/lib/store';
 import { useTabBarScrollHandler } from '@/lib/tab-bar-visibility';
 import { PRIORITY_DEFINITIONS, PriorityCode } from '@/lib/types';
+import { WebPortal } from '@/components/WebPortal';
 
 interface FilterChipProps {
   label: string;
@@ -115,6 +116,7 @@ export default function LibraryScreen() {
     selectedCategories.length +
     selectedPriorities.length +
     selectedSources.length;
+  const normalizedQuery = search.trim().toLowerCase();
 
   const filteredItems = useMemo(() => {
     let result = activeItems;
@@ -137,19 +139,34 @@ export default function LibraryScreen() {
       );
     }
 
-    if (search.trim()) {
-      const query = search.toLowerCase();
-
+    if (normalizedQuery) {
       result = result.filter(
         (item) =>
-          item.content.toLowerCase().includes(query) ||
-          item.source.toLowerCase().includes(query) ||
-          item.detail.toLowerCase().includes(query)
+          item.content.toLowerCase().includes(normalizedQuery) ||
+          (item.source || '').toLowerCase().includes(normalizedQuery) ||
+          (item.detail || '').toLowerCase().includes(normalizedQuery)
       );
     }
 
     return [...result].sort((a, b) => b.createdAt - a.createdAt);
-  }, [activeItems, search, selectedCategories, selectedPriorities, selectedSources]);
+  }, [
+    activeItems,
+    normalizedQuery,
+    selectedCategories,
+    selectedPriorities,
+    selectedSources,
+  ]);
+
+  const listStateKey = useMemo(
+    () =>
+      JSON.stringify({
+        q: normalizedQuery,
+        c: selectedCategories,
+        p: selectedPriorities,
+        s: selectedSources,
+      }),
+    [normalizedQuery, selectedCategories, selectedPriorities, selectedSources]
+  );
 
   const formatDate = (ts: number) => {
     const d = new Date(ts);
@@ -374,6 +391,7 @@ export default function LibraryScreen() {
 
       <FlatList
         data={filteredItems}
+        extraData={listStateKey}
         keyExtractor={(item) => item.id}
         onScroll={tabBarScroll.onScroll}
         scrollEventThrottle={tabBarScroll.scrollEventThrottle}
@@ -594,17 +612,9 @@ export default function LibraryScreen() {
         }}
       />
 
-      {isWeb ? (
-        showFiltersSheet ? (
-          <View style={styles.webModalRoot}>{renderFiltersSheet()}</View>
-        ) : null
-      ) : (
-        <Modal
-          visible={showFiltersSheet}
-          animationType="fade"
-          transparent
-          onRequestClose={closeFiltersSheet}
-        >
+      <WebPortal visible={isWeb && showFiltersSheet}>{renderFiltersSheet()}</WebPortal>
+      {!isWeb && (
+        <Modal visible={showFiltersSheet} animationType="fade" transparent onRequestClose={closeFiltersSheet}>
           {renderFiltersSheet()}
         </Modal>
       )}

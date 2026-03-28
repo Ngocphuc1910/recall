@@ -22,6 +22,7 @@ import PriorityPicker from '@/components/PriorityPicker';
 import { useStore } from '@/lib/store';
 import { ImportResult } from '@/lib/import';
 import { PriorityCode, StagedHighlight } from '@/lib/types';
+import { WebPortal } from '@/components/WebPortal';
 
 const SAMPLE_JSON = `{
   "version": 1,
@@ -105,6 +106,8 @@ export default function WaitingApprovalScreen() {
     setImportPreview(null);
     setLastImport(null);
   };
+
+  const isWeb = Platform.OS === 'web';
 
   const [editingHighlight, setEditingHighlight] = useState<StagedHighlight | null>(null);
   const [editContent, setEditContent] = useState('');
@@ -208,6 +211,199 @@ export default function WaitingApprovalScreen() {
       notify(getErrorMessage(e), true);
     }
   };
+
+  const renderEditSheet = () => (
+    <View style={styles.modalOverlay}>
+      <Pressable style={styles.modalBackdrop} onPress={closeEdit} />
+      <KeyboardAvoidingView
+        style={styles.modalKeyboard}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <View style={[styles.modalCard, { backgroundColor: colors.background, borderColor: colors.border }]}>
+          <View style={[styles.sheetHandle, { backgroundColor: colors.textTertiary + '40' }]} />
+          <View style={[styles.modalHeader, { borderBottomColor: colors.borderLight }]}>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>Edit Item</Text>
+            <TouchableOpacity onPress={closeEdit} style={styles.closeButton}>
+              <Ionicons name="close-outline" size={24} color={colors.textSecondary} />
+            </TouchableOpacity>
+          </View>
+          <ScrollView contentContainerStyle={styles.modalContent} keyboardShouldPersistTaps="handled">
+            <View style={styles.field}>
+              <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>CONTENT</Text>
+              <TextInput
+                style={[styles.input, styles.contentInput, { color: colors.text, backgroundColor: colors.surface, borderColor: colors.border }]}
+                placeholder="What do you want to remember?"
+                placeholderTextColor={colors.textTertiary}
+                value={editContent}
+                onChangeText={setEditContent}
+                multiline
+                textAlignVertical="top"
+              />
+            </View>
+            <View style={styles.field}>
+              <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>NOTES (OPTIONAL)</Text>
+              <TextInput
+                style={[styles.input, styles.detailInput, { color: colors.text, backgroundColor: colors.surface, borderColor: colors.border }]}
+                placeholder="Add context or notes..."
+                placeholderTextColor={colors.textTertiary}
+                value={editDetail}
+                onChangeText={setEditDetail}
+                multiline
+                textAlignVertical="top"
+              />
+            </View>
+            <View style={styles.field}>
+              <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>SOURCE (OPTIONAL)</Text>
+              <TextInput
+                style={[styles.input, { color: colors.text, backgroundColor: colors.surface, borderColor: colors.border }]}
+                placeholder="Book title, article, course..."
+                placeholderTextColor={colors.textTertiary}
+                value={editSource}
+                onChangeText={setEditSource}
+              />
+            </View>
+            <View style={styles.field}>
+              <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>CATEGORY</Text>
+              <CategoryPicker categories={categories} selectedCategoryId={editCategoryId} onSelect={setEditCategoryId} />
+            </View>
+            <View style={styles.field}>
+              <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>PRIORITY</Text>
+              <PriorityPicker selectedPriorityCode={editPriorityCode} onSelect={setEditPriorityCode} />
+            </View>
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                onPress={closeEdit}
+                style={[styles.cancelButton, { borderColor: colors.border, backgroundColor: colors.surface }]}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.cancelButtonText, { color: colors.text }]}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={handleSaveEdit}
+                disabled={!editContent.trim() || saving}
+                style={[styles.saveButton, { backgroundColor: editContent.trim() && !saving ? colors.tint : colors.tint + '40' }]}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="checkmark-circle-outline" size={20} color="#fff" />
+                <Text style={styles.saveButtonText}>{saving ? 'Saving…' : 'Save'}</Text>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+        </View>
+      </KeyboardAvoidingView>
+    </View>
+  );
+
+  const renderBulkAddSheet = () => (
+    <View style={styles.modalOverlay}>
+      <Pressable style={styles.modalBackdrop} onPress={closeBulkAdd} />
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalKeyboard}>
+        <View style={[styles.modalCard, { backgroundColor: colors.surface, shadowColor: colorScheme === 'dark' ? '#000' : '#111d2d' }]}>
+          <View style={[styles.modalHeader, { borderBottomColor: colors.borderLight }]}>
+            <View>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>Bulk Import JSON</Text>
+              <Text style={[styles.bulkAddSubtitle, { color: colors.textSecondary }]}>
+                Paste a highlights payload, validate, then stage for review.
+              </Text>
+            </View>
+            <TouchableOpacity onPress={closeBulkAdd}>
+              <Ionicons name="close" size={24} color={colors.textSecondary} />
+            </TouchableOpacity>
+          </View>
+          <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.bulkScrollContent}>
+            <View style={[styles.bulkCard, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}>
+              <Text style={[styles.bulkCardTitle, { color: colors.textSecondary }]}>JSON PAYLOAD</Text>
+              <TextInput
+                style={[styles.jsonInput, { color: colors.text, backgroundColor: colors.surface, borderColor: colors.border }]}
+                value={jsonText}
+                onChangeText={(text) => { setJsonText(text); setImportPreview(null); setLastImport(null); }}
+                placeholder={SAMPLE_JSON}
+                placeholderTextColor={colors.textTertiary}
+                multiline
+                textAlignVertical="top"
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              <View style={styles.bulkActions}>
+                <TouchableOpacity
+                  onPress={() => { setJsonText(SAMPLE_JSON); setImportPreview(null); setLastImport(null); }}
+                  style={[styles.bulkSecondaryBtn, { borderColor: colors.border, backgroundColor: colors.surface }]}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.bulkSecondaryBtnText, { color: colors.text }]}>Use Sample</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={handleBulkValidate}
+                  disabled={!canValidate}
+                  style={[styles.bulkPrimaryBtn, { backgroundColor: canValidate ? colors.tint : colors.tint + '40' }]}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="checkmark-circle-outline" size={18} color="#fff" />
+                  <Text style={styles.bulkPrimaryBtnText}>Validate</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+            <View style={[styles.bulkCard, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}>
+              <Text style={[styles.bulkCardTitle, { color: colors.textSecondary }]}>{previewTitle.toUpperCase()}</Text>
+              {importPreview ? (
+                <>
+                  <BulkSummaryRow label="Total rows" value={String(importPreview.total)} colors={colors} />
+                  <BulkSummaryRow label="Valid rows" value={String(importPreview.valid)} colors={colors} />
+                  <BulkSummaryRow label="Invalid rows" value={String(importPreview.skippedInvalid)} colors={colors} />
+                  <BulkSummaryRow label="Duplicate rows" value={String(importPreview.skippedDuplicates)} colors={colors} />
+                  <BulkSummaryRow label="Ready to import" value={String(importPreview.imported)} colors={colors} />
+                  {importPreview.invalidRows.length > 0 && (
+                    <View style={styles.bulkBlock}>
+                      <Text style={[styles.bulkBlockTitle, { color: colors.textSecondary }]}>Invalid Rows</Text>
+                      {importPreview.invalidRows.slice(0, 8).map((row) => (
+                        <Text key={`${row.rowIndex}-${row.reason}`} style={[styles.bulkBlockLine, { color: colors.destructive }]}>Row {row.rowIndex}: {row.reason}</Text>
+                      ))}
+                    </View>
+                  )}
+                  {importPreview.errors.length > 0 && (
+                    <View style={styles.bulkBlock}>
+                      <Text style={[styles.bulkBlockTitle, { color: colors.textSecondary }]}>Errors</Text>
+                      {importPreview.errors.map((error) => (
+                        <Text key={error} style={[styles.bulkBlockLine, { color: colors.destructive }]}>{error}</Text>
+                      ))}
+                    </View>
+                  )}
+                  {importPreview.warnings.length > 0 && (
+                    <View style={styles.bulkBlock}>
+                      <Text style={[styles.bulkBlockTitle, { color: colors.textSecondary }]}>Warnings</Text>
+                      {importPreview.warnings.slice(0, 8).map((warning) => (
+                        <Text key={warning} style={[styles.bulkBlockLine, { color: colors.warning }]}>{warning}</Text>
+                      ))}
+                    </View>
+                  )}
+                </>
+              ) : (
+                <Text style={[styles.bulkEmptyText, { color: colors.textTertiary }]}>
+                  Validate JSON to preview valid, invalid, and duplicate counts.
+                </Text>
+              )}
+              <TouchableOpacity
+                onPress={handleBulkImport}
+                disabled={!canImport}
+                style={[styles.importButton, { backgroundColor: canImport ? colors.success : colors.success + '55' }]}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="cloud-upload-outline" size={20} color="#fff" />
+                <Text style={styles.importButtonText}>{importing ? 'Staging…' : 'Stage for Review'}</Text>
+              </TouchableOpacity>
+              {lastImport && lastImport.errors.length === 0 && (
+                <Text style={[styles.bulkFooterNote, { color: colors.textTertiary }]}>
+                  {lastImport.imported} item{lastImport.imported !== 1 ? 's' : ''} staged for review
+                  {lastImport.skippedDuplicates > 0 ? `, ${lastImport.skippedDuplicates} duplicates skipped` : ''}
+                  {lastImport.skippedInvalid > 0 ? `, ${lastImport.skippedInvalid} invalid skipped` : ''}.
+                </Text>
+              )}
+            </View>
+          </ScrollView>
+        </View>
+      </KeyboardAvoidingView>
+    </View>
+  );
 
   return (
     <>
@@ -333,278 +529,30 @@ export default function WaitingApprovalScreen() {
       </ScrollView>
 
       {/* Edit bottom sheet */}
-      <Modal
-        visible={!!editingHighlight}
-        transparent
-        animationType="slide"
-        onRequestClose={closeEdit}
-      >
-        <View style={styles.modalOverlay}>
-          <Pressable style={styles.modalBackdrop} onPress={closeEdit} />
-          <KeyboardAvoidingView
-            style={styles.modalKeyboard}
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          >
-            <View
-              style={[
-                styles.modalCard,
-                { backgroundColor: colors.background, borderColor: colors.border },
-              ]}
-            >
-              <View
-                style={[styles.sheetHandle, { backgroundColor: colors.textTertiary + '40' }]}
-              />
-              <View style={[styles.modalHeader, { borderBottomColor: colors.borderLight }]}>
-                <Text style={[styles.modalTitle, { color: colors.text }]}>Edit Item</Text>
-                <TouchableOpacity onPress={closeEdit} style={styles.closeButton}>
-                  <Ionicons name="close-outline" size={24} color={colors.textSecondary} />
-                </TouchableOpacity>
-              </View>
-
-              <ScrollView
-                contentContainerStyle={styles.modalContent}
-                keyboardShouldPersistTaps="handled"
-              >
-                <View style={styles.field}>
-                  <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>CONTENT</Text>
-                  <TextInput
-                    style={[
-                      styles.input,
-                      styles.contentInput,
-                      {
-                        color: colors.text,
-                        backgroundColor: colors.surface,
-                        borderColor: colors.border,
-                      },
-                    ]}
-                    placeholder="What do you want to remember?"
-                    placeholderTextColor={colors.textTertiary}
-                    value={editContent}
-                    onChangeText={setEditContent}
-                    multiline
-                    textAlignVertical="top"
-                  />
-                </View>
-
-                <View style={styles.field}>
-                  <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>
-                    NOTES (OPTIONAL)
-                  </Text>
-                  <TextInput
-                    style={[
-                      styles.input,
-                      styles.detailInput,
-                      {
-                        color: colors.text,
-                        backgroundColor: colors.surface,
-                        borderColor: colors.border,
-                      },
-                    ]}
-                    placeholder="Add context or notes..."
-                    placeholderTextColor={colors.textTertiary}
-                    value={editDetail}
-                    onChangeText={setEditDetail}
-                    multiline
-                    textAlignVertical="top"
-                  />
-                </View>
-
-                <View style={styles.field}>
-                  <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>
-                    SOURCE (OPTIONAL)
-                  </Text>
-                  <TextInput
-                    style={[
-                      styles.input,
-                      {
-                        color: colors.text,
-                        backgroundColor: colors.surface,
-                        borderColor: colors.border,
-                      },
-                    ]}
-                    placeholder="Book title, article, course..."
-                    placeholderTextColor={colors.textTertiary}
-                    value={editSource}
-                    onChangeText={setEditSource}
-                  />
-                </View>
-
-                <View style={styles.field}>
-                  <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>CATEGORY</Text>
-                  <CategoryPicker
-                    categories={categories}
-                    selectedCategoryId={editCategoryId}
-                    onSelect={setEditCategoryId}
-                  />
-                </View>
-
-                <View style={styles.field}>
-                  <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>PRIORITY</Text>
-                  <PriorityPicker
-                    selectedPriorityCode={editPriorityCode}
-                    onSelect={setEditPriorityCode}
-                  />
-                </View>
-
-                <View style={styles.modalActions}>
-                  <TouchableOpacity
-                    onPress={closeEdit}
-                    style={[
-                      styles.cancelButton,
-                      { borderColor: colors.border, backgroundColor: colors.surface },
-                    ]}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={[styles.cancelButtonText, { color: colors.text }]}>Cancel</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    onPress={handleSaveEdit}
-                    disabled={!editContent.trim() || saving}
-                    style={[
-                      styles.saveButton,
-                      {
-                        backgroundColor:
-                          editContent.trim() && !saving
-                            ? colors.tint
-                            : colors.tint + '40',
-                      },
-                    ]}
-                    activeOpacity={0.8}
-                  >
-                    <Ionicons name="checkmark-circle-outline" size={20} color="#fff" />
-                    <Text style={styles.saveButtonText}>{saving ? 'Saving…' : 'Save'}</Text>
-                  </TouchableOpacity>
-                </View>
-              </ScrollView>
-            </View>
-          </KeyboardAvoidingView>
-        </View>
-      </Modal>
+      <WebPortal visible={isWeb && !!editingHighlight}>{renderEditSheet()}</WebPortal>
+      {!isWeb && (
+        <Modal visible={!!editingHighlight} transparent animationType="slide" onRequestClose={closeEdit}>
+          {renderEditSheet()}
+        </Modal>
+      )}
 
       {/* Bulk Add Modal */}
-      <Modal visible={showBulkAdd} transparent animationType="slide" onRequestClose={closeBulkAdd}>
-        <View style={styles.modalOverlay}>
-          <Pressable style={styles.modalBackdrop} onPress={closeBulkAdd} />
-          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalKeyboard}>
-            <View style={[styles.modalCard, { backgroundColor: colors.surface, shadowColor: colorScheme === 'dark' ? '#000' : '#111d2d' }]}>
-              <View style={[styles.modalHeader, { borderBottomColor: colors.borderLight }]}>
-                <View>
-                  <Text style={[styles.modalTitle, { color: colors.text }]}>Bulk Import JSON</Text>
-                  <Text style={[styles.bulkAddSubtitle, { color: colors.textSecondary }]}>
-                    Paste a highlights payload, validate, then stage for review.
-                  </Text>
-                </View>
-                <TouchableOpacity onPress={closeBulkAdd}>
-                  <Ionicons name="close" size={24} color={colors.textSecondary} />
-                </TouchableOpacity>
-              </View>
-              <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.bulkScrollContent}>
-
-                {/* JSON Payload card */}
-                <View style={[styles.bulkCard, { backgroundColor: colors.elevated, borderColor: colors.borderLight }]}>
-                  <Text style={[styles.bulkCardTitle, { color: colors.textSecondary }]}>JSON PAYLOAD</Text>
-                  <TextInput
-                    style={[styles.jsonInput, { color: colors.text, backgroundColor: colors.background, borderColor: colors.border }]}
-                    value={jsonText}
-                    onChangeText={(text) => { setJsonText(text); setImportPreview(null); setLastImport(null); }}
-                    placeholder={SAMPLE_JSON}
-                    placeholderTextColor={colors.textTertiary}
-                    multiline
-                    textAlignVertical="top"
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                  />
-                  <View style={styles.bulkActions}>
-                    <TouchableOpacity
-                      onPress={() => { setJsonText(SAMPLE_JSON); setImportPreview(null); setLastImport(null); }}
-                      style={[styles.secondaryButton, { borderColor: colors.border, backgroundColor: colors.background }]}
-                      activeOpacity={0.8}
-                    >
-                      <Text style={[styles.secondaryButtonText, { color: colors.text }]}>Use Sample</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      onPress={handleBulkValidate}
-                      disabled={!canValidate}
-                      style={[styles.primaryButton, { backgroundColor: canValidate ? colors.tint : colors.tint + '40' }]}
-                      activeOpacity={0.8}
-                    >
-                      <Ionicons name="checkmark-circle-outline" size={18} color="#fff" />
-                      <Text style={styles.primaryButtonText}>Validate</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-
-                {/* Preview card */}
-                <View style={[styles.bulkCard, { backgroundColor: colors.elevated, borderColor: colors.borderLight }]}>
-                  <Text style={[styles.bulkCardTitle, { color: colors.textSecondary }]}>{previewTitle.toUpperCase()}</Text>
-
-                  {importPreview ? (
-                    <>
-                      <BulkSummaryRow label="Total rows" value={String(importPreview.total)} colors={colors} />
-                      <BulkSummaryRow label="Valid rows" value={String(importPreview.valid)} colors={colors} />
-                      <BulkSummaryRow label="Invalid rows" value={String(importPreview.skippedInvalid)} colors={colors} />
-                      <BulkSummaryRow label="Duplicate rows" value={String(importPreview.skippedDuplicates)} colors={colors} />
-                      <BulkSummaryRow label="Ready to import" value={String(importPreview.imported)} colors={colors} />
-
-                      {importPreview.invalidRows.length > 0 && (
-                        <View style={styles.bulkBlock}>
-                          <Text style={[styles.bulkBlockTitle, { color: colors.textSecondary }]}>Invalid Rows</Text>
-                          {importPreview.invalidRows.slice(0, 8).map((row) => (
-                            <Text key={`${row.rowIndex}-${row.reason}`} style={[styles.bulkBlockLine, { color: colors.destructive }]}>
-                              Row {row.rowIndex}: {row.reason}
-                            </Text>
-                          ))}
-                        </View>
-                      )}
-                      {importPreview.errors.length > 0 && (
-                        <View style={styles.bulkBlock}>
-                          <Text style={[styles.bulkBlockTitle, { color: colors.textSecondary }]}>Errors</Text>
-                          {importPreview.errors.map((error) => (
-                            <Text key={error} style={[styles.bulkBlockLine, { color: colors.destructive }]}>{error}</Text>
-                          ))}
-                        </View>
-                      )}
-                      {importPreview.warnings.length > 0 && (
-                        <View style={styles.bulkBlock}>
-                          <Text style={[styles.bulkBlockTitle, { color: colors.textSecondary }]}>Warnings</Text>
-                          {importPreview.warnings.slice(0, 8).map((warning) => (
-                            <Text key={warning} style={[styles.bulkBlockLine, { color: colors.warning }]}>{warning}</Text>
-                          ))}
-                        </View>
-                      )}
-                    </>
-                  ) : (
-                    <Text style={[styles.bulkEmptyText, { color: colors.textTertiary }]}>
-                      Validate JSON to preview valid, invalid, and duplicate counts.
-                    </Text>
-                  )}
-
-                  <TouchableOpacity
-                    onPress={handleBulkImport}
-                    disabled={!canImport}
-                    style={[styles.importButton, { backgroundColor: canImport ? colors.success : colors.success + '55' }]}
-                    activeOpacity={0.8}
-                  >
-                    <Ionicons name="cloud-upload-outline" size={20} color="#fff" />
-                    <Text style={styles.importButtonText}>{importing ? 'Staging…' : 'Stage for Review'}</Text>
-                  </TouchableOpacity>
-
-                  {lastImport && lastImport.errors.length === 0 && (
-                    <Text style={[styles.bulkFooterNote, { color: colors.textTertiary }]}>
-                      {lastImport.imported} item{lastImport.imported !== 1 ? 's' : ''} staged for review
-                      {lastImport.skippedDuplicates > 0 ? `, ${lastImport.skippedDuplicates} duplicates skipped` : ''}
-                      {lastImport.skippedInvalid > 0 ? `, ${lastImport.skippedInvalid} invalid skipped` : ''}.
-                    </Text>
-                  )}
-                </View>
-
-              </ScrollView>
-            </View>
-          </KeyboardAvoidingView>
-        </View>
-      </Modal>
+      <WebPortal visible={isWeb && showBulkAdd}>{renderBulkAddSheet()}</WebPortal>
+      {!isWeb && (
+        <Modal visible={showBulkAdd} transparent animationType="slide" onRequestClose={closeBulkAdd}>
+          {renderBulkAddSheet()}
+        </Modal>
+      )}
     </>
+  );
+}
+
+function BulkSummaryRow({ label, value, colors }: { label: string; value: string; colors: any }) {
+  return (
+    <View style={styles.bulkSummaryRow}>
+      <Text style={[styles.bulkSummaryLabel, { color: colors.textSecondary }]}>{label}</Text>
+      <Text style={[styles.bulkSummaryValue, { color: colors.text }]}>{value}</Text>
+    </View>
   );
 }
 
@@ -829,15 +777,54 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   syncButtonText: { color: '#fff', fontSize: 14, fontWeight: '600' },
-  bulkAddLabel: { fontSize: 12, fontWeight: '600', letterSpacing: 0.5, marginBottom: 6 },
-  bulkAddInput: {
-    borderWidth: StyleSheet.hairlineWidth,
+  bulkAddSubtitle: { fontSize: 13, marginTop: 2 },
+  bulkScrollContent: { padding: 16, paddingBottom: 32, gap: 12 },
+  bulkCard: {
     borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: 14,
   },
-  bulkAddTextArea: { minHeight: 180 },
+  bulkCardTitle: { fontSize: 12, fontWeight: '700', letterSpacing: 0.5, marginBottom: 10 },
+  jsonInput: {
+    minHeight: 200,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 10,
+    padding: 12,
+    fontSize: 13,
+    lineHeight: 19,
+    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
+  },
+  bulkActions: { flexDirection: 'row', gap: 10, marginTop: 12 },
+  bulkSecondaryBtn: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+  },
+  bulkSecondaryBtnText: { fontSize: 14, fontWeight: '500' },
+  bulkPrimaryBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    borderRadius: 10,
+    paddingVertical: 12,
+  },
+  bulkPrimaryBtnText: { color: '#fff', fontSize: 15, fontWeight: '600' },
+  bulkSummaryRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 6 },
+  bulkSummaryLabel: { fontSize: 14 },
+  bulkSummaryValue: { fontSize: 14, fontWeight: '600' },
+  bulkBlock: { marginTop: 10, paddingTop: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#E5E5EA', gap: 3 },
+  bulkBlockTitle: { fontSize: 13, fontWeight: '600', marginBottom: 2 },
+  bulkBlockLine: { fontSize: 13, lineHeight: 18 },
+  bulkEmptyText: { fontSize: 14, marginBottom: 6 },
+  importButton: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 8, marginTop: 14, borderRadius: 10, paddingVertical: 14,
+  },
+  importButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  bulkFooterNote: { fontSize: 12, marginTop: 10, textAlign: 'center' },
 
   sectionHeader: {
     flexDirection: 'row',
@@ -914,6 +901,7 @@ const styles = StyleSheet.create({
   historyContent: { fontSize: 14, lineHeight: 20 },
 
   // Edit bottom sheet
+  webModalRoot: { ...StyleSheet.absoluteFillObject, zIndex: 20 },
   modalOverlay: { flex: 1, justifyContent: 'flex-end' },
   modalBackdrop: {
     ...StyleSheet.absoluteFillObject,
@@ -928,6 +916,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   modalCard: {
+    flex: 1,
     width: '100%',
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,

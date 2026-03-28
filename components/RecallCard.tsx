@@ -25,7 +25,7 @@ import { useStore } from '@/lib/store';
 import PriorityBadge from '@/components/PriorityBadge';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
-const SWIPE_THRESHOLD = 120;
+const SWIPE_THRESHOLD = 60;
 
 interface Props {
   item: RecallItem;
@@ -70,7 +70,7 @@ export default function RecallCard({ item, onPress, onRecall, onForget, expanded
   const recallBgStyle = useAnimatedStyle(() => ({
     opacity: interpolate(
       -translateX.value,
-      [0, 60, 120],
+      [0, 30, 60],
       [0, 0.5, 1],
       'clamp'
     ),
@@ -81,8 +81,8 @@ export default function RecallCard({ item, onPress, onRecall, onForget, expanded
       {
         scale: interpolate(
           -translateX.value,
-          [0, 80, 120],
-          [0.5, 0.8, 1.2],
+          [0, 40, 60],
+          [0.5, 0.9, 1.2],
           'clamp'
         ),
       },
@@ -93,7 +93,7 @@ export default function RecallCard({ item, onPress, onRecall, onForget, expanded
   const forgetBgStyle = useAnimatedStyle(() => ({
     opacity: interpolate(
       translateX.value,
-      [0, 60, 120],
+      [0, 30, 60],
       [0, 0.5, 1],
       'clamp'
     ),
@@ -104,8 +104,8 @@ export default function RecallCard({ item, onPress, onRecall, onForget, expanded
       {
         scale: interpolate(
           translateX.value,
-          [0, 80, 120],
-          [0.5, 0.8, 1.2],
+          [0, 40, 60],
+          [0.5, 0.9, 1.2],
           'clamp'
         ),
       },
