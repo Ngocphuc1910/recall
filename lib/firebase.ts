@@ -298,6 +298,7 @@ async function resolveOrCreateSession(user: User): Promise<ResolvedSession> {
   await runTransaction(db, async (transaction) => {
     const membershipSnapshot = await transaction.get(membershipRef);
     let membership: AccountMembership;
+    let existingProfile: AccountProfile | null = null;
 
     if (!membershipSnapshot.exists()) {
       const accountId = doc(collection(db, 'accounts')).id;
@@ -317,11 +318,19 @@ async function resolveOrCreateSession(user: User): Promise<ResolvedSession> {
         };
       }
 
-      const profileUpdate = buildProfileUpdate(user, membership, provider);
+      const profileRef = getAccountProfileRef(membership.accountId);
+      const profileSnapshot = await transaction.get(profileRef);
+      existingProfile = profileSnapshot.exists()
+        ? (profileSnapshot.data() as AccountProfile)
+        : null;
+      const profileUpdate = buildProfileUpdate(
+        user,
+        membership,
+        existingProfile,
+        provider
+      );
       if (profileUpdate) {
-        transaction.set(getAccountProfileRef(membership.accountId), profileUpdate, {
-          merge: true,
-        });
+        transaction.set(profileRef, profileUpdate, { merge: true });
       }
     }
 
@@ -387,9 +396,7 @@ function syncMembership(
     !membership.providers.includes(provider);
 
   if (!changed) {
-    return {
-      lastLoginAt: Date.now(),
-    } satisfies Partial<AccountMembership>;
+    return null;
   }
 
   return {
@@ -405,11 +412,21 @@ function syncMembership(
 function buildProfileUpdate(
   user: User,
   membership: AccountMembership,
+  profile: AccountProfile | null,
   provider: AuthProviderId
 ) {
   const linkedProviders = Array.from(
-    new Set([...(membership.providers ?? []), provider])
+    new Set([...(profile?.linkedProviders ?? membership.providers ?? []), provider])
   );
+
+  const providersChanged =
+    linkedProviders.length !== (profile?.linkedProviders?.length ?? 0) ||
+    linkedProviders.some((entry) => !(profile?.linkedProviders ?? []).includes(entry));
+  const ownerChanged = profile?.ownerAuthUid !== user.uid;
+
+  if (!providersChanged && !ownerChanged) {
+    return null;
+  }
 
   return {
     ownerAuthUid: user.uid,
