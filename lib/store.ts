@@ -105,7 +105,7 @@ interface RecallStore extends PersistedRecallState {
   bulkImportFromJson: (
     rawJson: string,
     options?: ImportActionOptions
-  ) => ImportResult;
+  ) => Promise<ImportResult>;
 
   requestAppleBooksSync: () => Promise<void>;
   updateStagedHighlightCategory: (
@@ -261,7 +261,7 @@ export const useStore = create<RecallStore>()(
         scheduleCloudSync(get, set);
       },
 
-      bulkImportFromJson: (rawJson, options) => {
+      bulkImportFromJson: async (rawJson, options) => {
         const state = get();
         const parsed = parseImportJson(rawJson, state.settings.defaultIntervals);
 
@@ -283,11 +283,10 @@ export const useStore = create<RecallStore>()(
         }
 
         const dedupeKeys = buildAllDedupeKeys(state.items, state.stagedHighlights);
-        const itemsToImport: RecallItem[] = [];
+        const highlightsToStage: StagedHighlight[] = [];
         let skippedDuplicates = 0;
 
         parsed.validItems.forEach((row) => {
-          const categoryId = resolveImportCategoryId(row.categoryId, state.categories);
           const mappedSource = row.source ?? parsed.source?.bookTitle ?? '';
 
           const dedupeKey = buildImportDedupKey({
@@ -305,24 +304,32 @@ export const useStore = create<RecallStore>()(
 
           dedupeKeys.add(dedupeKey);
 
-          const item = createNewItem({
+          const priority = getPriorityDefinition(row.meta?.style);
+          const resolvedCategoryId = resolveImportCategoryId(row.categoryId, state.categories);
+          const now = Date.now();
+
+          highlightsToStage.push({
+            id: '',
             content: row.content,
-            detail: row.detail,
+            detail: row.detail ?? '',
+            categoryId: resolvedCategoryId,
+            categoryStatus: 'chosen',
             source: mappedSource,
-            categoryId,
-            intervals: row.intervals,
-            priorityCode: getPriorityDefinition(row.meta?.style).code,
-            priorityLabel: getPriorityDefinition(row.meta?.style).label,
+            priorityCode: priority.code,
+            priorityLabel: priority.label,
+            dedupeKey,
+            approvalStatus: 'pending',
+            importStatus: 'staged',
             externalId: row.externalId,
             sourceAssetId: parsed.source?.assetId,
             sourceProvider: parsed.source?.provider,
             locationCfi: row.meta?.locationCfi,
             highlightedAt: row.meta?.highlightedAt,
             highlightStyle: row.meta?.style,
-            createdAt: parseCreatedAtFromHighlightedAt(row.meta?.highlightedAt),
+            syncedAt: now,
+            createdAt: parseCreatedAtFromHighlightedAt(row.meta?.highlightedAt) ?? now,
+            updatedAt: now,
           });
-
-          itemsToImport.push(item);
         });
 
         if (skippedDuplicates > 0) {
@@ -333,16 +340,28 @@ export const useStore = create<RecallStore>()(
           );
         }
 
-        if (!options?.dryRun && itemsToImport.length > 0) {
+        if (!options?.dryRun && highlightsToStage.length > 0) {
+          const session = await ensureCurrentSession(set);
+          const batch = writeBatch(db);
+          const staged: StagedHighlight[] = [];
+
+          highlightsToStage.forEach((highlight) => {
+            const ref = doc(getAccountStagedHighlightsCollection(session.accountId));
+            const withId = { ...highlight, id: ref.id };
+            batch.set(ref, withId);
+            staged.push(withId);
+          });
+
+          await batch.commit();
+
           set((current) => ({
-            items: [...itemsToImport, ...current.items],
+            stagedHighlights: [...staged, ...current.stagedHighlights],
           }));
-          scheduleCloudSync(get, set);
         }
 
         return {
           ...resultBase,
-          imported: itemsToImport.length,
+          imported: highlightsToStage.length,
           skippedDuplicates,
         };
       },

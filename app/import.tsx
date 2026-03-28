@@ -46,10 +46,11 @@ export default function ImportScreen() {
   const [jsonText, setJsonText] = useState('');
   const [preview, setPreview] = useState<ImportResult | null>(null);
   const [lastImport, setLastImport] = useState<ImportResult | null>(null);
+  const [importing, setImporting] = useState(false);
 
   const canValidate = jsonText.trim().length > 0;
   const canImport =
-    !!preview && preview.errors.length === 0 && preview.valid > 0;
+    !!preview && preview.errors.length === 0 && preview.valid > 0 && !importing;
 
   const previewTitle = useMemo(() => {
     if (!preview) return 'No preview yet';
@@ -57,37 +58,36 @@ export default function ImportScreen() {
     return 'Validation summary';
   }, [preview]);
 
-  const handleValidate = () => {
-    const result = bulkImportFromJson(jsonText, { dryRun: true });
+  const handleValidate = async () => {
+    const result = await bulkImportFromJson(jsonText, { dryRun: true });
     setPreview(result);
     setLastImport(null);
   };
 
-  const handleImport = () => {
+  const handleImport = async () => {
     if (!canImport) return;
+    setImporting(true);
 
-    const result = bulkImportFromJson(jsonText);
-    setPreview(result);
-    setLastImport(result);
+    try {
+      const result = await bulkImportFromJson(jsonText);
+      setPreview(result);
+      setLastImport(result);
 
-    if (result.errors.length > 0) {
-      return;
+      if (result.errors.length > 0) {
+        return;
+      }
+
+      router.replace('/waiting-approval');
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'Import failed.';
+      if (Platform.OS === 'web') {
+        alert(message);
+      } else {
+        Alert.alert('Import Error', message);
+      }
+    } finally {
+      setImporting(false);
     }
-
-    const summary = [
-      `Total rows: ${result.total}`,
-      `Imported: ${result.imported}`,
-      `Skipped duplicates: ${result.skippedDuplicates}`,
-      `Skipped invalid: ${result.skippedInvalid}`,
-    ].join('\n');
-
-    if (Platform.OS === 'web') {
-      alert(`Import complete\n\n${summary}`);
-    } else {
-      Alert.alert('Import Complete', summary);
-    }
-
-    router.replace('/library');
   };
 
   return (
@@ -260,13 +260,14 @@ export default function ImportScreen() {
           activeOpacity={0.8}
         >
           <Ionicons name="cloud-upload-outline" size={20} color="#fff" />
-          <Text style={styles.importButtonText}>Import</Text>
+          <Text style={styles.importButtonText}>{importing ? 'Staging…' : 'Stage for Review'}</Text>
         </TouchableOpacity>
 
         {lastImport && lastImport.errors.length === 0 ? (
           <Text style={[styles.footerNote, { color: colors.textTertiary }]}>
-            Last import: {lastImport.imported} added, {lastImport.skippedDuplicates}{' '}
-            duplicates skipped, {lastImport.skippedInvalid} invalid skipped.
+            {lastImport.imported} item{lastImport.imported !== 1 ? 's' : ''} staged for review
+            {lastImport.skippedDuplicates > 0 ? `, ${lastImport.skippedDuplicates} duplicates skipped` : ''}
+            {lastImport.skippedInvalid > 0 ? `, ${lastImport.skippedInvalid} invalid skipped` : ''}.
           </Text>
         ) : null}
       </View>
