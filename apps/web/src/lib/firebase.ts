@@ -1,7 +1,15 @@
 'use client';
 
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getAuth, signInAnonymously, type User } from 'firebase/auth';
+import {
+  getAuth,
+  GoogleAuthProvider,
+  linkWithPopup,
+  signInAnonymously,
+  signInWithPopup,
+  signOut,
+  type User,
+} from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 
 const firebaseConfig = {
@@ -14,6 +22,7 @@ const firebaseConfig = {
 };
 
 const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+const googleProvider = new GoogleAuthProvider();
 
 export const auth = getAuth(app);
 export const db = getFirestore(app);
@@ -34,4 +43,55 @@ export async function ensureSignedIn() {
   }
 
   return signInPromise;
+}
+
+export async function signInOrLinkWithGoogle() {
+  const currentUser = auth.currentUser;
+
+  if (currentUser?.isAnonymous) {
+    const result = await linkWithPopup(currentUser, googleProvider);
+    return result.user;
+  }
+
+  const result = await signInWithPopup(auth, googleProvider);
+  return result.user;
+}
+
+export async function signOutUser() {
+  await signOut(auth);
+}
+
+export function getFriendlyAuthError(error: unknown) {
+  if (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    typeof error.code === 'string'
+  ) {
+    switch (error.code) {
+      case 'auth/operation-not-allowed':
+        return 'Google sign-in is disabled in Firebase Auth.';
+      case 'auth/popup-blocked':
+        return 'Your browser blocked the Google sign-in popup.';
+      case 'auth/popup-closed-by-user':
+        return 'Google sign-in was cancelled before it finished.';
+      case 'auth/unauthorized-domain':
+        return 'This domain is not authorized in Firebase Authentication.';
+      case 'auth/credential-already-in-use':
+        return 'This Google account is already linked to another Recall account. Sign in there and migrate data once.';
+      default:
+        return error.code;
+    }
+  }
+
+  if (
+    typeof error === 'object' &&
+    error !== null &&
+    'message' in error &&
+    typeof error.message === 'string'
+  ) {
+    return error.message;
+  }
+
+  return 'Unable to complete authentication.';
 }

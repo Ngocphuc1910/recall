@@ -14,7 +14,13 @@ import {
   type SyncRequest,
 } from '@recall/contracts';
 import { onAuthStateChanged } from 'firebase/auth';
-import { auth, ensureSignedIn } from './firebase';
+import {
+  auth,
+  ensureSignedIn,
+  getFriendlyAuthError,
+  signInOrLinkWithGoogle,
+  signOutUser,
+} from './firebase';
 import {
   addRecallItem,
   approveStagedHighlights,
@@ -34,6 +40,7 @@ import {
 
 export function useRecallData() {
   const [uid, setUid] = useState<string | null>(null);
+  const [isAnonymous, setIsAnonymous] = useState(true);
   const [categories, setCategories] = useState<Category[]>(DEFAULT_CATEGORIES);
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [items, setItems] = useState<RecallItem[]>([]);
@@ -46,14 +53,16 @@ export function useRecallData() {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
         setUid(user.uid);
+        setIsAnonymous(user.isAnonymous);
         return;
       }
 
       try {
         const signedIn = await ensureSignedIn();
         setUid(signedIn.uid);
+        setIsAnonymous(signedIn.isAnonymous);
       } catch (nextError) {
-        setError(nextError instanceof Error ? nextError.message : 'Unable to connect.');
+        setError(getFriendlyAuthError(nextError));
       }
     });
 
@@ -104,6 +113,7 @@ export function useRecallData() {
 
   return {
     uid,
+    isAnonymous,
     categories,
     settings,
     items,
@@ -129,6 +139,26 @@ export function useRecallData() {
     requestAppleBooksSync: () => requestAppleBooksSync(syncRequests),
     importFromJson: (rawJson: string) =>
       importFromJson(rawJson, categories, settings, items, stagedHighlights),
+    signInWithGoogle: async () => {
+      try {
+        const user = await signInOrLinkWithGoogle();
+        setUid(user.uid);
+        setIsAnonymous(user.isAnonymous);
+        setError(null);
+      } catch (nextError) {
+        setError(getFriendlyAuthError(nextError));
+        throw nextError;
+      }
+    },
+    signOut: async () => {
+      try {
+        await signOutUser();
+        setError(null);
+      } catch (nextError) {
+        setError(getFriendlyAuthError(nextError));
+        throw nextError;
+      }
+    },
   };
 }
 

@@ -11,6 +11,7 @@
     "web:export": "expo export -p web --output-dir dist",
     "web:premium": "npm --workspace apps/web run dev",
     "web:premium:build": "npm --workspace apps/web run build",
+    "firebase:migrate-user": "node scripts/migrate-firebase-user-data.mjs",
     "sync:apple-books": "node scripts/apple-books-sync.mjs",
     "watch:apple-books": "node scripts/apple-books-sync.mjs --watch",
     "build:ios:preview": "npx eas-cli@latest build --platform ios --profile preview",
