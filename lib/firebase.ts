@@ -6,13 +6,13 @@ import {
   OAuthProvider,
   User,
   getAuth,
-  getRedirectResult,
   linkWithCredential,
-  linkWithRedirect,
+  linkWithPopup,
   onAuthStateChanged,
+  onIdTokenChanged,
   signInAnonymously,
   signInWithCredential,
-  signInWithRedirect,
+  signInWithPopup,
   signOut,
 } from 'firebase/auth';
 import {
@@ -66,10 +66,8 @@ export const db = getFirestore(app);
 export const functions = getFunctions(app, 'asia-southeast1');
 
 let signInPromise: Promise<User> | null = null;
-let redirectResultPromise: Promise<void> | null = null;
 let lastResolvedAuthKey: string | null = null;
 let resolvedSessionPromise: Promise<ResolvedSession> | null = null;
-let lastRedirectError: unknown = null;
 const migratedLegacyUids = new Set<string>();
 
 function getOrCreateAuth(): Auth {
@@ -115,7 +113,7 @@ export function subscribeToResolvedSession(
   listener: (session: ResolvedSession | null) => void,
   onError?: (error: unknown) => void
 ) {
-  return onAuthStateChanged(auth, async (user) => {
+  return onIdTokenChanged(auth, async (user) => {
     if (!user) {
       lastResolvedAuthKey = null;
       resolvedSessionPromise = null;
@@ -281,7 +279,15 @@ async function maybeHandleRedirectResult() {
 
   if (!redirectResultPromise) {
     redirectResultPromise = getRedirectResult(auth)
-      .then(() => undefined)
+      .then(async (result) => {
+        if (result?.user) {
+          await reload(result.user);
+        } else if (auth.currentUser) {
+          await reload(auth.currentUser);
+        }
+        lastResolvedAuthKey = null;
+        resolvedSessionPromise = null;
+      })
       .catch((error) => {
         lastRedirectError = error;
       });
