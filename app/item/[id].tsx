@@ -112,18 +112,6 @@ export default function ItemDetailScreen() {
   const updateSettings = useStore((s) => s.updateSettings);
   const showToast = useStore((s) => s.showToast);
 
-  if (!item) {
-    return (
-      <View style={[styles.container, { backgroundColor: colors.background }]}>
-        <View style={styles.centered}>
-          <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-            Item not found
-          </Text>
-        </View>
-      </View>
-    );
-  }
-
   const formatDate = (ts: number | null) => {
     if (!ts) return 'Never';
     return new Date(ts).toLocaleDateString('en-US', {
@@ -142,6 +130,7 @@ export default function ItemDetailScreen() {
   };
 
   const handleDelete = () => {
+    if (!item) return;
     deleteItem(item.id);
     showToast('Item deleted', 'destructive');
     router.back();
@@ -218,18 +207,68 @@ export default function ItemDetailScreen() {
   };
 
   const handleRecall = () => {
+    if (!item) return;
     markRecalled(item.id);
     showToast('Marked as recalled', 'success');
     navigateAfterReview();
   };
 
   const handleForgot = () => {
+    if (!item) return;
     markForgotten(item.id);
     showToast('Marked as forgotten', 'warning');
     navigateAfterReview();
   };
 
+  React.useEffect(() => {
+    if (typeof document === 'undefined') {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const tagName = target?.tagName?.toLowerCase();
+      const isEditable =
+        !!target?.isContentEditable ||
+        tagName === 'input' ||
+        tagName === 'textarea' ||
+        tagName === 'select';
+
+      if (isEditable || showDetailsSheet || priorityMenuOpen) {
+        return;
+      }
+
+      if (event.repeat) {
+        return;
+      }
+
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        handleRecall();
+      }
+
+      if (event.key === 'Shift') {
+        event.preventDefault();
+        handleForgot();
+      }
+
+      if (event.key === 'Delete' || event.key === 'Backspace') {
+        event.preventDefault();
+        handleDelete();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [
+    handleForgot,
+    handleRecall,
+    priorityMenuOpen,
+    showDetailsSheet,
+  ]);
+
   const handlePriorityChange = (priorityCode: PriorityCode) => {
+    if (!item) return;
     const priority = getPriorityDefinition(priorityCode);
     updateItem(item.id, {
       priorityCode: priority.code,
@@ -249,6 +288,18 @@ export default function ItemDetailScreen() {
   const sideColumnStyle = compactLayout
     ? styles.columnFullWidth
     : styles.sideColumn;
+
+  if (!item) {
+    return (
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+        <View style={styles.centered}>
+          <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+            Item not found
+          </Text>
+        </View>
+      </View>
+    );
+  }
 
   const renderSkeleton = () => (
     <View style={styles.focusShell}>
