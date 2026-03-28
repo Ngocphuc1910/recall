@@ -86,7 +86,7 @@ export default function TodayScreen() {
   const updateSettings = useStore((s) => s.updateSettings);
 
   const [showAddModal, setShowAddModal] = useState(false);
-  const [filterMode, setFilterMode] = useState<'today' | 'week' | 'month' | 'pastdue'>('today');
+  const [filterMode, setFilterMode] = useState<'today' | 'tomorrow' | 'week' | 'nextweek' | 'month' | 'nextmonth' | 'pastdue'>('today');
   const [showFilterMenu, setShowFilterMenu] = useState(false);
   const [expandedCards, setExpandedCards] = useState(false);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
@@ -113,13 +113,26 @@ export default function TodayScreen() {
 
     return items.filter((item) => {
       if (item.status !== 'active') return false;
+      const startOfTomorrow = startOfToday + DAY;
+      const endOfTomorrow = endOfToday + DAY;
+      const startOfNextWeek = startOfToday + 7 * DAY;
+      const endOfNextWeek = endOfToday + 13 * DAY;
+      const startOfNextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1).getTime();
+      const endOfNextMonth = new Date(now.getFullYear(), now.getMonth() + 2, 0, 23, 59, 59, 999).getTime();
+
       switch (filterMode) {
         case 'today':
           return item.nextReviewDate <= endOfToday;
+        case 'tomorrow':
+          return item.nextReviewDate >= startOfTomorrow && item.nextReviewDate <= endOfTomorrow;
         case 'week':
           return item.nextReviewDate <= endOfToday + 6 * DAY;
+        case 'nextweek':
+          return item.nextReviewDate >= startOfNextWeek && item.nextReviewDate <= endOfNextWeek;
         case 'month':
           return item.nextReviewDate <= endOfToday + 29 * DAY;
+        case 'nextmonth':
+          return item.nextReviewDate >= startOfNextMonth && item.nextReviewDate <= endOfNextMonth;
         case 'pastdue':
           return item.nextReviewDate < startOfToday;
         default:
@@ -171,8 +184,11 @@ export default function TodayScreen() {
 
   const filterTitles: Record<string, string> = {
     today: 'Today',
+    tomorrow: 'Tomorrow',
     week: 'This Week',
+    nextweek: 'Next Week',
     month: 'This Month',
+    nextmonth: 'Next Month',
     pastdue: 'Past Due',
   };
 
@@ -432,8 +448,11 @@ export default function TodayScreen() {
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
                 {([
                   { key: 'today' as const, label: 'Today' },
+                  { key: 'tomorrow' as const, label: 'Tomorrow' },
                   { key: 'week' as const, label: 'This Week' },
+                  { key: 'nextweek' as const, label: 'Next Week' },
                   { key: 'month' as const, label: 'This Month' },
+                  { key: 'nextmonth' as const, label: 'Next Month' },
                   { key: 'pastdue' as const, label: 'Past Due' },
                 ]).map((option) => (
                   <FilterChip
@@ -715,11 +734,12 @@ export default function TodayScreen() {
               ? 'No items to recall today. Tap + to add new items and start building your memory.'
               : filterMode === 'pastdue'
               ? 'All your items are up to date. Great job!'
-              : `No items due ${filterMode === 'week' ? 'this week' : 'this month'}. Check back later!`
+              : `No items due ${filterTitles[filterMode]?.toLowerCase() ?? filterMode}. Check back later!`
           }
         />
       ) : (
         <FlatList
+          style={styles.flatList}
           data={filteredItems}
           keyExtractor={(item) => item.id}
           onScroll={tabBarScroll.onScroll}
@@ -979,6 +999,9 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 6,
     zIndex: 5,
+  },
+  flatList: {
+    flex: 1,
   },
   list: {
     paddingTop: 8,

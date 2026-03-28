@@ -5,6 +5,7 @@ import {
   View,
   TouchableOpacity,
   Dimensions,
+  Platform,
   useColorScheme,
 } from 'react-native';
 import Animated, {
@@ -109,6 +110,96 @@ export default function RecallCard({ item, onPress, onRecall, onForget, expanded
     ],
   }));
 
+  const cardContent = (
+    <TouchableOpacity
+      onPress={onPress}
+      activeOpacity={0.88}
+      style={styles.cardInner}
+    >
+      <View style={styles.itemLeading}>
+        <View style={styles.itemContent}>
+          <Text
+            style={[styles.contentText, { color: colors.text }]}
+            numberOfLines={expanded ? undefined : 2}
+          >
+            {item.content}
+          </Text>
+
+          <View style={styles.itemMetaRow}>
+            <Text
+              style={[styles.itemSource, { color: colors.textSecondary }]}
+              numberOfLines={1}
+            >
+              {item.source || 'Unknown source'}
+            </Text>
+            <Text style={[styles.metaDivider, { color: colors.textTertiary }]}>
+              •
+            </Text>
+            <Text style={[styles.itemMeta, { color: colors.textTertiary }]}>
+              {(() => {
+                const d = new Date(item.nextReviewDate);
+                const now = new Date();
+                now.setHours(0, 0, 0, 0);
+                const diff = Math.floor((d.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                if (diff <= 0) return 'Today';
+                if (diff === 1) return 'Tomorrow';
+                return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+              })()}
+            </Text>
+          </View>
+
+          <View style={styles.itemFooter}>
+            <View
+              style={[
+                styles.categoryPill,
+                {
+                  backgroundColor:
+                    (category?.color ?? colors.tint) + '15',
+                },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.categoryPillText,
+                  { color: category?.color ?? colors.tint },
+                ]}
+              >
+                {category?.name ?? 'Other'}
+              </Text>
+            </View>
+            <PriorityBadge
+              priorityCode={item.priorityCode}
+              priorityLabel={item.priorityLabel}
+              compact
+            />
+          </View>
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
+
+  // On web, skip the GestureDetector entirely — the Pan gesture intercepts
+  // touch events on Safari and blocks native vertical scrolling in FlatList.
+  // Swipe-to-recall/forget is a native-only interaction.
+  if (Platform.OS === 'web') {
+    return (
+      <View style={styles.wrapper}>
+        <View
+          style={[
+            styles.card,
+            {
+              backgroundColor: colors.surface,
+              shadowColor: colors.shadow,
+              borderColor: colors.borderLight,
+            },
+          ]}
+        >
+          {cardContent}
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.wrapper}>
       {/* Recall background — left swipe */}
@@ -153,71 +244,7 @@ export default function RecallCard({ item, onPress, onRecall, onForget, expanded
             cardAnimatedStyle,
           ]}
         >
-          <TouchableOpacity
-            onPress={onPress}
-            activeOpacity={0.88}
-            style={styles.cardInner}
-          >
-            <View style={styles.itemLeading}>
-              <View style={styles.itemContent}>
-                <Text
-                  style={[styles.contentText, { color: colors.text }]}
-                  numberOfLines={expanded ? undefined : 2}
-                >
-                  {item.content}
-                </Text>
-
-                <View style={styles.itemMetaRow}>
-                  <Text
-                    style={[styles.itemSource, { color: colors.textSecondary }]}
-                    numberOfLines={1}
-                  >
-                    {item.source || 'Unknown source'}
-                  </Text>
-                  <Text style={[styles.metaDivider, { color: colors.textTertiary }]}>
-                    •
-                  </Text>
-                  <Text style={[styles.itemMeta, { color: colors.textTertiary }]}>
-                    {(() => {
-                      const d = new Date(item.nextReviewDate);
-                      const now = new Date();
-                      now.setHours(0, 0, 0, 0);
-                      const diff = Math.floor((d.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-                      if (diff <= 0) return 'Today';
-                      if (diff === 1) return 'Tomorrow';
-                      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-                    })()}
-                  </Text>
-                </View>
-
-                <View style={styles.itemFooter}>
-                  <View
-                    style={[
-                      styles.categoryPill,
-                      {
-                        backgroundColor:
-                          (category?.color ?? colors.tint) + '15',
-                      },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.categoryPillText,
-                        { color: category?.color ?? colors.tint },
-                      ]}
-                    >
-                      {category?.name ?? 'Other'}
-                    </Text>
-                  </View>
-                  <PriorityBadge
-                    priorityCode={item.priorityCode}
-                    priorityLabel={item.priorityLabel}
-                    compact
-                  />
-                </View>
-              </View>
-            </View>
-          </TouchableOpacity>
+          {cardContent}
         </Animated.View>
       </GestureDetector>
     </View>
