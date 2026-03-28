@@ -14,6 +14,7 @@ import {
   StyleSheet,
   Text,
   View,
+  Image,
   useColorScheme,
   useWindowDimensions,
 } from 'react-native';
@@ -27,6 +28,8 @@ export { ErrorBoundary } from 'expo-router';
 export const unstable_settings = {
   initialRouteName: '(tabs)',
 };
+
+const IPHONE_FRAME_IMAGE = require('../assets/images/iphone-15-pro-frame.png');
 
 SplashScreen.preventAutoHideAsync();
 
@@ -85,7 +88,12 @@ function RootLayoutNav() {
   }, [hasHydrated, initializeCloudSync]);
 
   const appContent = (
-    <>
+    <View
+      style={[
+        styles.appContent,
+        isIphoneViewport ? styles.appContentPhonePreview : null,
+      ]}
+    >
       <Stack
         screenOptions={{
           headerStyle: {
@@ -156,7 +164,7 @@ function RootLayoutNav() {
           </View>
         </View>
       ) : null}
-    </>
+    </View>
   );
 
   return (
@@ -167,35 +175,28 @@ function RootLayoutNav() {
             styles.appCanvas,
             {
               backgroundColor: isIphoneViewport ? '#F3F4F6' : colors.background,
+              justifyContent: isIphoneViewport ? 'center' : undefined,
             },
           ]}
         >
           {isIphoneViewport ? (
-            <View style={[styles.phoneShell, { shadowColor: '#000000' }]}>
-              <View style={styles.phoneSideButtonsLeft}>
-                <View style={styles.phoneSideButtonShort} />
-                <View style={styles.phoneSideButtonLong} />
-                <View style={styles.phoneSideButtonLong} />
-              </View>
-              <View style={styles.phoneSideButtonsRight}>
-                <View style={styles.phoneSideButtonPower} />
-              </View>
-              <View style={styles.phoneIslandWrap} pointerEvents="none">
-                <View style={styles.phoneIsland}>
-                  <View style={styles.phoneSpeaker} />
-                  <View style={styles.phoneCamera} />
-                </View>
-              </View>
+            <View style={[styles.phoneMockup, { shadowColor: '#000000' }]}>
               <View
                 style={[
-                  styles.appFramePhonePreview,
+                  styles.phoneMockupScreen,
                   {
-                    borderColor: colors.borderLight,
                     backgroundColor: colors.background,
                   },
                 ]}
               >
                 {appContent}
+              </View>
+              <View pointerEvents="none" style={styles.phoneMockupFrame}>
+                <Image
+                  source={IPHONE_FRAME_IMAGE}
+                  style={styles.phoneMockupFrameImage}
+                  resizeMode="contain"
+                />
               </View>
             </View>
           ) : (
@@ -218,95 +219,45 @@ const styles = StyleSheet.create({
     flex: 1,
     alignSelf: 'stretch',
   },
-  appFramePhonePreview: {
-    width: 430,
-    maxWidth: '100%',
-    flex: 1,
-    alignSelf: 'center',
-    borderRadius: 34,
-    overflow: 'hidden',
-    borderWidth: StyleSheet.hairlineWidth,
-  },
   appFrameDesktop: {
     width: '100%',
   },
-  phoneShell: {
-    width: 458,
-    maxWidth: '100%',
+  appContent: {
     flex: 1,
+  },
+  appContentPhonePreview: {
+    paddingTop: 40,
+    paddingBottom: 8,
+    paddingHorizontal: 10,
+  },
+  phoneMockup: {
+    height: '96%',
+    maxHeight: 920,
+    aspectRatio: 365 / 750,
+    width: '100%',
+    maxWidth: 448,
     alignSelf: 'center',
-    marginVertical: 10,
-    paddingTop: 18,
-    paddingBottom: 14,
-    paddingHorizontal: 12,
-    borderRadius: 44,
-    backgroundColor: '#0E1013',
     position: 'relative',
-    shadowOffset: { width: 0, height: 24 },
-    shadowOpacity: 0.18,
-    shadowRadius: 48,
-    elevation: 12,
+    shadowOffset: { width: 0, height: 30 },
+    shadowOpacity: 0.2,
+    shadowRadius: 42,
+    elevation: 16,
   },
-  phoneIslandWrap: {
+  phoneMockupScreen: {
     position: 'absolute',
-    top: 7,
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-    zIndex: 3,
+    top: '2.1%',
+    bottom: '2%',
+    left: '7.5%',
+    right: '7.1%',
+    borderRadius: 30,
+    overflow: 'hidden',
   },
-  phoneIsland: {
-    width: 116,
-    height: 28,
-    borderRadius: 16,
-    backgroundColor: '#050608',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
+  phoneMockupFrame: {
+    ...StyleSheet.absoluteFillObject,
   },
-  phoneSpeaker: {
-    width: 38,
-    height: 6,
-    borderRadius: 999,
-    backgroundColor: '#1E2228',
-  },
-  phoneCamera: {
-    width: 10,
-    height: 10,
-    borderRadius: 999,
-    backgroundColor: '#151A21',
-    borderWidth: 1,
-    borderColor: '#20262D',
-  },
-  phoneSideButtonsLeft: {
-    position: 'absolute',
-    left: -3,
-    top: 138,
-    gap: 10,
-  },
-  phoneSideButtonsRight: {
-    position: 'absolute',
-    right: -3,
-    top: 182,
-  },
-  phoneSideButtonShort: {
-    width: 4,
-    height: 28,
-    borderRadius: 999,
-    backgroundColor: '#1D2127',
-  },
-  phoneSideButtonLong: {
-    width: 4,
-    height: 56,
-    borderRadius: 999,
-    backgroundColor: '#1D2127',
-  },
-  phoneSideButtonPower: {
-    width: 4,
-    height: 88,
-    borderRadius: 999,
-    backgroundColor: '#1D2127',
+  phoneMockupFrameImage: {
+    width: '100%',
+    height: '100%',
   },
   toastViewport: {
     position: 'absolute',

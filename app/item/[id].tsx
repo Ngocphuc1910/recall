@@ -256,6 +256,11 @@ export default function ItemDetailScreen() {
         event.preventDefault();
         handleDelete();
       }
+
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        router.back();
+      }
     };
 
     document.addEventListener('keydown', handleKeyDown);

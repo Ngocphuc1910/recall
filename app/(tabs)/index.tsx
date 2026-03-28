@@ -375,6 +375,174 @@ export default function TodayScreen() {
     </View>
   );
 
+  const renderFilterSheet = () => {
+    const closeSheet = () => setShowFilterMenu(false);
+    return (
+      <View style={styles.sheetOverlay}>
+        <Pressable style={styles.sheetBackdrop} onPress={closeSheet} />
+        <View
+          style={[
+            styles.sheetCard,
+            {
+              backgroundColor: colors.surface,
+              borderColor: colors.borderLight,
+              shadowColor: colors.shadow,
+            },
+          ]}
+        >
+          <View
+            style={[
+              styles.sheetHandle,
+              { backgroundColor: colors.textTertiary + '40', marginTop: 10, marginBottom: 12 },
+            ]}
+          />
+
+          <View style={styles.sheetHeader}>
+            <View style={styles.sheetHeaderCopy}>
+              <Text style={[styles.sheetTitle, { color: colors.text }]}>
+                Filter
+              </Text>
+              <Text style={[styles.sheetDescription, { color: colors.textSecondary }]}>
+                Narrow items by time range, category, priority, or source.
+              </Text>
+            </View>
+            <TouchableOpacity
+              onPress={closeSheet}
+              style={[
+                styles.sheetCloseButton,
+                { backgroundColor: colors.surfaceSecondary, borderColor: colors.border },
+              ]}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="close-outline" size={18} color={colors.textSecondary} />
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView
+            style={styles.sheetScroll}
+            contentContainerStyle={styles.sheetScrollContent}
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={styles.filterSection}>
+              <Text style={[styles.filterLabel, { color: colors.textSecondary }]}>
+                TIME RANGE
+              </Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+                {([
+                  { key: 'today' as const, label: 'Today' },
+                  { key: 'week' as const, label: 'This Week' },
+                  { key: 'month' as const, label: 'This Month' },
+                  { key: 'pastdue' as const, label: 'Past Due' },
+                ]).map((option) => (
+                  <FilterChip
+                    key={option.key}
+                    label={option.label}
+                    selected={filterMode === option.key}
+                    onPress={() => setFilterMode(option.key)}
+                    colors={colors}
+                  />
+                ))}
+              </ScrollView>
+            </View>
+
+            <View style={styles.filterSection}>
+              <Text style={[styles.filterLabel, { color: colors.textSecondary }]}>
+                CATEGORY
+              </Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+                <FilterChip
+                  label="All"
+                  selected={selectedCategories.length === 0}
+                  onPress={() => setSelectedCategories([])}
+                  colors={colors}
+                />
+                {categories.map((category) => (
+                  <FilterChip
+                    key={category.id}
+                    label={category.name}
+                    selected={selectedCategories.includes(category.id)}
+                    onPress={() => toggleCategory(category.id)}
+                    colors={colors}
+                    selectedColor={category.color}
+                  />
+                ))}
+              </ScrollView>
+            </View>
+
+            <View style={styles.filterSection}>
+              <Text style={[styles.filterLabel, { color: colors.textSecondary }]}>
+                PRIORITY
+              </Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+                <FilterChip
+                  label="Any"
+                  selected={selectedPriorities.length === 0}
+                  onPress={() => setSelectedPriorities([])}
+                  colors={colors}
+                />
+                {PRIORITY_DEFINITIONS.map((priority) => (
+                  <FilterChip
+                    key={priority.code}
+                    label={priority.label}
+                    selected={selectedPriorities.includes(priority.code)}
+                    onPress={() => togglePriority(priority.code)}
+                    colors={colors}
+                    selectedColor={priority.color}
+                  />
+                ))}
+              </ScrollView>
+            </View>
+
+            <View style={styles.filterSection}>
+              <Text style={[styles.filterLabel, { color: colors.textSecondary }]}>
+                SOURCE
+              </Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+                <FilterChip
+                  label="Any"
+                  selected={selectedSources.length === 0}
+                  onPress={() => setSelectedSources([])}
+                  colors={colors}
+                />
+                {sourceOptions.map((src) => (
+                  <FilterChip
+                    key={src.value}
+                    label={src.label}
+                    selected={selectedSources.includes(src.value)}
+                    onPress={() => toggleSource(src.value)}
+                    colors={colors}
+                  />
+                ))}
+              </ScrollView>
+            </View>
+          </ScrollView>
+
+          <View style={styles.sheetActions}>
+            <TouchableOpacity
+              onPress={() => { clearFacetFilters(); setFilterMode('today'); }}
+              style={[
+                styles.sheetSecondaryAction,
+                { backgroundColor: colors.surfaceSecondary, borderColor: colors.border },
+              ]}
+              activeOpacity={0.85}
+            >
+              <Text style={[styles.sheetSecondaryActionText, { color: colors.text }]}>
+                Reset
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={closeSheet}
+              style={[styles.sheetPrimaryAction, { backgroundColor: colors.tint }]}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.sheetPrimaryActionText}>Done</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    );
+  };
+
   const renderAddOverlay = () => (
     <View style={styles.modalOverlay}>
       <Pressable style={styles.modalBackdrop} onPress={closeAddModal} />
@@ -598,178 +766,6 @@ export default function TodayScreen() {
       )}
     </View>
   );
-
-  function renderFilterSheet() {
-    const closeSheet = () => setShowFilterMenu(false);
-    return (
-      <View style={styles.sheetOverlay}>
-        <Pressable style={styles.sheetBackdrop} onPress={closeSheet} />
-        <View
-          style={[
-            styles.sheetCard,
-            {
-              backgroundColor: colors.surface,
-              borderColor: colors.borderLight,
-              shadowColor: colors.shadow,
-            },
-          ]}
-        >
-          <View
-            style={[
-              styles.sheetHandle,
-              { backgroundColor: colors.textTertiary + '40' },
-            ]}
-          />
-
-          <View style={styles.sheetHeader}>
-            <View style={styles.sheetHeaderCopy}>
-              <Text style={[styles.sheetTitle, { color: colors.text }]}>
-                Filter
-              </Text>
-              <Text style={[styles.sheetDescription, { color: colors.textSecondary }]}>
-                Narrow items by time range, category, priority, or source.
-              </Text>
-            </View>
-            <TouchableOpacity
-              onPress={closeSheet}
-              style={[
-                styles.sheetCloseButton,
-                { backgroundColor: colors.surfaceSecondary, borderColor: colors.border },
-              ]}
-              activeOpacity={0.85}
-            >
-              <Ionicons name="close-outline" size={18} color={colors.textSecondary} />
-            </TouchableOpacity>
-          </View>
-
-          <ScrollView
-            style={styles.sheetScroll}
-            contentContainerStyle={styles.sheetScrollContent}
-            showsVerticalScrollIndicator={false}
-          >
-            {/* Time range */}
-            <View style={styles.filterSection}>
-              <Text style={[styles.filterLabel, { color: colors.textSecondary }]}>
-                TIME RANGE
-              </Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
-                {([
-                  { key: 'today' as const, label: 'Today', icon: 'today-outline' as const },
-                  { key: 'week' as const, label: 'This Week', icon: 'calendar-outline' as const },
-                  { key: 'month' as const, label: 'This Month', icon: 'calendar-number-outline' as const },
-                  { key: 'pastdue' as const, label: 'Past Due', icon: 'alert-circle-outline' as const },
-                ]).map((option) => (
-                  <FilterChip
-                    key={option.key}
-                    label={option.label}
-                    selected={filterMode === option.key}
-                    onPress={() => setFilterMode(option.key)}
-                    colors={colors}
-                  />
-                ))}
-              </ScrollView>
-            </View>
-
-            {/* Category */}
-            <View style={styles.filterSection}>
-              <Text style={[styles.filterLabel, { color: colors.textSecondary }]}>
-                CATEGORY
-              </Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
-                <FilterChip
-                  label="All"
-                  selected={selectedCategories.length === 0}
-                  onPress={() => setSelectedCategories([])}
-                  colors={colors}
-                />
-                {categories.map((category) => (
-                  <FilterChip
-                    key={category.id}
-                    label={category.name}
-                    selected={selectedCategories.includes(category.id)}
-                    onPress={() => toggleCategory(category.id)}
-                    colors={colors}
-                    selectedColor={category.color}
-                  />
-                ))}
-              </ScrollView>
-            </View>
-
-            {/* Priority */}
-            <View style={styles.filterSection}>
-              <Text style={[styles.filterLabel, { color: colors.textSecondary }]}>
-                PRIORITY
-              </Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
-                <FilterChip
-                  label="Any"
-                  selected={selectedPriorities.length === 0}
-                  onPress={() => setSelectedPriorities([])}
-                  colors={colors}
-                />
-                {PRIORITY_DEFINITIONS.map((priority) => (
-                  <FilterChip
-                    key={priority.code}
-                    label={priority.label}
-                    selected={selectedPriorities.includes(priority.code)}
-                    onPress={() => togglePriority(priority.code)}
-                    colors={colors}
-                    selectedColor={priority.color}
-                  />
-                ))}
-              </ScrollView>
-            </View>
-
-            {/* Source */}
-            <View style={styles.filterSection}>
-              <Text style={[styles.filterLabel, { color: colors.textSecondary }]}>
-                SOURCE
-              </Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
-                <FilterChip
-                  label="Any"
-                  selected={selectedSources.length === 0}
-                  onPress={() => setSelectedSources([])}
-                  colors={colors}
-                />
-                {sourceOptions.map((src) => (
-                  <FilterChip
-                    key={src.value}
-                    label={src.label}
-                    selected={selectedSources.includes(src.value)}
-                    onPress={() => toggleSource(src.value)}
-                    colors={colors}
-                  />
-                ))}
-              </ScrollView>
-            </View>
-          </ScrollView>
-
-          <View style={styles.sheetActions}>
-            <TouchableOpacity
-              onPress={() => { clearFacetFilters(); setFilterMode('today'); }}
-              style={[
-                styles.sheetSecondaryAction,
-                { backgroundColor: colors.surfaceSecondary, borderColor: colors.border },
-              ]}
-              activeOpacity={0.85}
-            >
-              <Text style={[styles.sheetSecondaryActionText, { color: colors.text }]}>
-                Reset
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={closeSheet}
-              style={[styles.sheetPrimaryAction, { backgroundColor: colors.tint }]}
-              activeOpacity={0.85}
-            >
-              <Text style={styles.sheetPrimaryActionText}>Done</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
-    );
-  }
 }
 
 const styles = StyleSheet.create({

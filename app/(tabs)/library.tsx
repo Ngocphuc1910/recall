@@ -401,23 +401,6 @@ export default function LibraryScreen() {
                     Library
                   </Text>
                 </View>
-
-                <View
-                  style={[
-                    styles.countCard,
-                    {
-                      backgroundColor: colors.surfaceSecondary,
-                      borderColor: colors.border,
-                    },
-                  ]}
-                >
-                  <Text style={[styles.countValue, { color: colors.text }]}>
-                    {filteredItems.length}
-                  </Text>
-                  <Text style={[styles.countLabel, { color: colors.textSecondary }]}>
-                    item{filteredItems.length !== 1 ? 's' : ''}
-                  </Text>
-                </View>
               </View>
 
               <View
@@ -497,7 +480,7 @@ export default function LibraryScreen() {
                     { color: colors.textSecondary },
                   ]}
                 >
-                  Ordered by newest additions so recent captures stay within reach.
+                  {filteredItems.length} item{filteredItems.length !== 1 ? 's' : ''} — Ordered by newest additions so recent captures stay within reach.
                 </Text>
               </View>
             </View>
