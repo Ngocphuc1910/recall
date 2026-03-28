@@ -35,7 +35,8 @@
       "themeColor": "#FFFFFF"
     },
     "plugins": [
-      "expo-router"
+      "expo-router",
+      "expo-apple-authentication"
     ],
     "experiments": {
       "typedRoutes": true

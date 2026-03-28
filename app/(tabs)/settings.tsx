@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import * as AppleAuthentication from 'expo-apple-authentication';
 import Colors from '@/constants/Colors';
 import { useStore } from '@/lib/store';
 import { useTabBarScrollHandler } from '@/lib/tab-bar-visibility';
@@ -39,6 +40,7 @@ export default function SettingsScreen() {
   const cloudError = useStore((s) => s.cloudError);
   const lastSyncedAt = useStore((s) => s.lastSyncedAt);
   const initializeCloudSync = useStore((s) => s.initializeCloudSync);
+  const startAppleUpgrade = useStore((s) => s.startAppleUpgrade);
   const startGoogleUpgrade = useStore((s) => s.startGoogleUpgrade);
   const createAccountLinkCode = useStore((s) => s.createAccountLinkCode);
   const redeemAccountLinkCode = useStore((s) => s.redeemAccountLinkCode);
@@ -95,8 +97,27 @@ export default function SettingsScreen() {
           'Apple Books sync requested. Your Mac sync agent can fetch it now.'
         );
       }
-    } catch {
-      const message = 'Unable to request Apple Books sync.';
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'Unable to request Apple Books sync.';
+      if (Platform.OS === 'web') {
+        alert(message);
+      } else {
+        Alert.alert('Error', message);
+      }
+    }
+  };
+
+  const handleAppleUpgrade = async () => {
+    try {
+      await startAppleUpgrade();
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'Unable to start Apple sign-in.';
       if (Platform.OS === 'web') {
         alert(message);
       } else {
@@ -261,6 +282,27 @@ export default function SettingsScreen() {
               color={colors.textTertiary}
             />
           </TouchableOpacity>
+        ) : null}
+
+        {Platform.OS === 'ios' && !cloudIsStableAccount ? (
+          <View
+            style={[
+              styles.card,
+              styles.appleButtonCard,
+              {
+                backgroundColor: colors.surface,
+                borderColor: colors.borderLight,
+              },
+            ]}
+          >
+            <AppleAuthentication.AppleAuthenticationButton
+              buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
+              buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+              cornerRadius={10}
+              style={styles.appleButton}
+              onPress={handleAppleUpgrade}
+            />
+          </View>
         ) : null}
 
         {cloudIsStableAccount ? (
@@ -799,6 +841,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     fontSize: 16,
+  },
+  appleButtonCard: {
+    padding: 12,
+  },
+  appleButton: {
+    width: '100%',
+    height: 48,
   },
   inlineAction: {
     alignSelf: 'flex-end',

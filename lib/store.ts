@@ -25,6 +25,7 @@ import {
   getAccountSyncRequestsCollection,
   redeemAccountLinkCode as redeemLinkCode,
   signOutCurrentUser,
+  startAppleSignIn,
   startGoogleRedirectAuth,
   subscribeToResolvedSession,
 } from './firebase';
@@ -126,6 +127,7 @@ interface RecallStore extends PersistedRecallState {
   showToast: (message: string, tone?: ToastTone) => void;
   hideToast: () => void;
   initializeCloudSync: () => void;
+  startAppleUpgrade: () => Promise<void>;
   startGoogleUpgrade: () => Promise<void>;
   createAccountLinkCode: () => Promise<AccountLinkCode>;
   redeemAccountLinkCode: (code: string) => Promise<void>;
@@ -626,6 +628,10 @@ export const useStore = create<RecallStore>()(
 
       startGoogleUpgrade: async () => {
         await startGoogleRedirectAuth();
+      },
+
+      startAppleUpgrade: async () => {
+        await startAppleSignIn();
       },
 
       createAccountLinkCode: async () => {

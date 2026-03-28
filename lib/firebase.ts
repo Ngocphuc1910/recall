@@ -3,12 +3,15 @@ import { getApp, getApps, initializeApp } from 'firebase/app';
 import {
   Auth,
   GoogleAuthProvider,
+  OAuthProvider,
   User,
   getAuth,
   getRedirectResult,
+  linkWithCredential,
   linkWithRedirect,
   onAuthStateChanged,
   signInAnonymously,
+  signInWithCredential,
   signInWithRedirect,
   signOut,
 } from 'firebase/auth';
@@ -28,6 +31,8 @@ import {
   writeBatch,
 } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
+import * as AppleAuthentication from 'expo-apple-authentication';
+import * as Crypto from 'expo-crypto';
 import {
   AccountLinkCode,
   AccountMembership,
@@ -54,6 +59,7 @@ const firebaseConfig = {
 
 const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 const googleProvider = new GoogleAuthProvider();
+const appleProvider = new OAuthProvider('apple.com');
 
 export const auth = getOrCreateAuth();
 export const db = getFirestore(app);
@@ -61,7 +67,7 @@ export const functions = getFunctions(app, 'asia-southeast1');
 
 let signInPromise: Promise<User> | null = null;
 let redirectResultPromise: Promise<void> | null = null;
-let lastResolvedUid: string | null = null;
+let lastResolvedAuthKey: string | null = null;
 let resolvedSessionPromise: Promise<ResolvedSession> | null = null;
 let lastRedirectError: unknown = null;
 const migratedLegacyUids = new Set<string>();
@@ -90,12 +96,13 @@ export async function ensureSignedIn(): Promise<User> {
 
 export async function ensureResolvedSession(): Promise<ResolvedSession> {
   const user = await ensureSignedIn();
+  const authKey = getUserResolutionKey(user);
 
-  if (resolvedSessionPromise && lastResolvedUid === user.uid) {
+  if (resolvedSessionPromise && lastResolvedAuthKey === authKey) {
     return resolvedSessionPromise;
   }
 
-  lastResolvedUid = user.uid;
+  lastResolvedAuthKey = authKey;
   resolvedSessionPromise = resolveOrCreateSession(user);
   return resolvedSessionPromise;
 }
@@ -110,7 +117,7 @@ export function subscribeToResolvedSession(
 ) {
   return onAuthStateChanged(auth, async (user) => {
     if (!user) {
-      lastResolvedUid = null;
+      lastResolvedAuthKey = null;
       resolvedSessionPromise = null;
       listener(null);
       return;
@@ -140,9 +147,52 @@ export async function startGoogleRedirectAuth() {
   await signInWithRedirect(auth, googleProvider);
 }
 
+export async function startAppleSignIn() {
+  if (Platform.OS !== 'ios') {
+    throw new Error('Apple sign-in is only available on iOS.');
+  }
+
+  const isAvailable = await AppleAuthentication.isAvailableAsync();
+  if (!isAvailable) {
+    throw new Error('Apple sign-in is not available on this device.');
+  }
+
+  const rawNonce = Crypto.randomUUID();
+  const hashedNonce = await Crypto.digestStringAsync(
+    Crypto.CryptoDigestAlgorithm.SHA256,
+    rawNonce
+  );
+
+  const appleCredential = await AppleAuthentication.signInAsync({
+    requestedScopes: [
+      AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+      AppleAuthentication.AppleAuthenticationScope.EMAIL,
+    ],
+    nonce: hashedNonce,
+  });
+
+  if (!appleCredential.identityToken) {
+    throw new Error('Apple sign-in did not return a valid identity token.');
+  }
+
+  const firebaseCredential = appleProvider.credential({
+    idToken: appleCredential.identityToken,
+    rawNonce,
+  });
+
+  if (auth.currentUser?.isAnonymous) {
+    await linkWithCredential(auth.currentUser, firebaseCredential);
+  } else {
+    await signInWithCredential(auth, firebaseCredential);
+  }
+
+  lastResolvedAuthKey = null;
+  resolvedSessionPromise = null;
+}
+
 export async function signOutCurrentUser() {
   await signOut(auth);
-  lastResolvedUid = null;
+  lastResolvedAuthKey = null;
   resolvedSessionPromise = null;
 }
 
@@ -158,7 +208,7 @@ export async function redeemAccountLinkCode(code: string) {
     'redeemAccountLinkCode'
   );
   const result = await callable({ code });
-  lastResolvedUid = null;
+  lastResolvedAuthKey = null;
   resolvedSessionPromise = null;
   return result.data;
 }
@@ -266,6 +316,13 @@ async function resolveOrCreateSession(user: User): Promise<ResolvedSession> {
           ...updatedMembership,
         };
       }
+
+      const profileUpdate = buildProfileUpdate(user, membership, provider);
+      if (profileUpdate) {
+        transaction.set(getAccountProfileRef(membership.accountId), profileUpdate, {
+          merge: true,
+        });
+      }
     }
 
     session = {
@@ -343,6 +400,22 @@ function syncMembership(
     lastLoginAt: Date.now(),
     status: nextStatus,
   } satisfies Partial<AccountMembership>;
+}
+
+function buildProfileUpdate(
+  user: User,
+  membership: AccountMembership,
+  provider: AuthProviderId
+) {
+  const linkedProviders = Array.from(
+    new Set([...(membership.providers ?? []), provider])
+  );
+
+  return {
+    ownerAuthUid: user.uid,
+    linkedProviders,
+    updatedAt: Date.now(),
+  } satisfies Partial<AccountProfile>;
 }
 
 async function maybeBootstrapLegacyData(session: ResolvedSession) {
@@ -567,8 +640,14 @@ function mergeStagedHighlights(existing: StagedHighlight[], incoming: StagedHigh
       continue;
     }
 
-    byDedupeKey.set(highlight.dedupeKey, preferred);
-    toWrite.push(preferred);
+    const mergedHighlight = {
+      ...preferred,
+      id: current.id,
+      updatedAt: Date.now(),
+    };
+
+    byDedupeKey.set(highlight.dedupeKey, mergedHighlight);
+    toWrite.push(mergedHighlight);
   }
 
   return { toWrite };
@@ -621,6 +700,16 @@ function getPrimaryProvider(user: User): AuthProviderId {
   return (provider ?? 'unknown') as AuthProviderId;
 }
 
+function getUserResolutionKey(user: User) {
+  const providers = user.providerData
+    .map((entry) => entry.providerId)
+    .filter(Boolean)
+    .sort()
+    .join(',');
+
+  return [user.uid, String(user.isAnonymous), providers].join('::');
+}
+
 function getRecallItemDedupKey(item: RecallItem) {
   return buildImportDedupKey({
     externalId: item.externalId,
@@ -652,9 +741,24 @@ export function getFirebaseErrorMessage(error: unknown): string {
         return 'Your browser blocked the Google sign-in flow.';
       case 'auth/popup-closed-by-user':
         return 'Google sign-in was cancelled before it finished.';
+      case 'auth/account-exists-with-different-credential':
+        return 'This email is already linked to a different sign-in method.';
+      case 'auth/missing-or-invalid-nonce':
+        return 'Apple sign-in could not be verified. Try again.';
+      case 'auth/provider-already-linked':
+        return 'This provider is already linked to your account.';
       default:
         return error.code;
     }
+  }
+
+  if (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    error.code === 'ERR_REQUEST_CANCELED'
+  ) {
+    return 'Sign-in was cancelled before it finished.';
   }
 
   if (
