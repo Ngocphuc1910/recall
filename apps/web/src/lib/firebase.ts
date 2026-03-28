@@ -45,7 +45,7 @@ export async function ensureSignedIn() {
   return signInPromise;
 }
 
-export async function signInOrLinkWithGoogle() {
+export async function upgradeAnonymousWithGoogle() {
   const currentUser = auth.currentUser;
 
   if (currentUser?.isAnonymous) {
@@ -53,6 +53,11 @@ export async function signInOrLinkWithGoogle() {
     return result.user;
   }
 
+  const result = await signInWithPopup(auth, googleProvider);
+  return result.user;
+}
+
+export async function signInWithGoogle() {
   const result = await signInWithPopup(auth, googleProvider);
   return result.user;
 }

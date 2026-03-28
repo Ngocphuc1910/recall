@@ -168,6 +168,36 @@ export async function startGooglePopupAuth() {
   }
 }
 
+export async function startGooglePopupSignIn() {
+  if (Platform.OS !== 'web') {
+    throw new Error('Google sign-in is only available on web.');
+  }
+
+  if (googlePopupInProgress) {
+    return;
+  }
+
+  googlePopupInProgress = true;
+  try {
+    try {
+      await signInWithPopup(auth, googleProvider);
+    } catch (error: any) {
+      if (
+        error?.code === 'auth/cancelled-popup-request' ||
+        error?.code === 'auth/popup-closed-by-user'
+      ) {
+        return;
+      }
+      throw error;
+    }
+
+    lastResolvedAuthKey = null;
+    resolvedSessionPromise = null;
+  } finally {
+    googlePopupInProgress = false;
+  }
+}
+
 export async function startAppleSignIn() {
   if (Platform.OS !== 'ios') {
     throw new Error('Apple sign-in is only available on iOS.');
@@ -314,6 +344,12 @@ async function resolveOrCreateSession(user: User): Promise<ResolvedSession> {
       });
     } else {
       membership = membershipSnapshot.data() as AccountMembership;
+      const profileRef = getAccountProfileRef(membership.accountId);
+      const profileSnapshot = await transaction.get(profileRef);
+      existingProfile = profileSnapshot.exists()
+        ? (profileSnapshot.data() as AccountProfile)
+        : null;
+
       const updatedMembership = syncMembership(user, membership, provider);
       if (updatedMembership) {
         transaction.set(membershipRef, updatedMembership, { merge: true });
@@ -323,11 +359,6 @@ async function resolveOrCreateSession(user: User): Promise<ResolvedSession> {
         };
       }
 
-      const profileRef = getAccountProfileRef(membership.accountId);
-      const profileSnapshot = await transaction.get(profileRef);
-      existingProfile = profileSnapshot.exists()
-        ? (profileSnapshot.data() as AccountProfile)
-        : null;
       const profileUpdate = buildProfileUpdate(
         user,
         membership,

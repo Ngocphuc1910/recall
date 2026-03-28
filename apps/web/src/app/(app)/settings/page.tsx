@@ -15,6 +15,7 @@ export default function SettingsPage() {
     uid,
     isAnonymous,
     signInWithGoogle,
+    upgradeWithGoogle,
     signOut,
   } = useRecallData();
   const [authBusy, setAuthBusy] = useState(false);
@@ -34,19 +35,39 @@ export default function SettingsPage() {
           <p className="muted">Latest request: {syncRequests[0]?.status ?? 'None'}</p>
           {error ? <p className="muted">{error}</p> : null}
           <div className="button-row">
+            {isAnonymous ? (
+              <Button
+                variant="secondary"
+                disabled={authBusy}
+                onClick={async () => {
+                  setAuthBusy(true);
+                  try {
+                    await signInWithGoogle();
+                  } finally {
+                    setAuthBusy(false);
+                  }
+                }}
+              >
+                Sign In To Existing Google Account
+              </Button>
+            ) : null}
             <Button
-              variant="secondary"
+              variant={isAnonymous ? 'ghost' : 'secondary'}
               disabled={authBusy}
               onClick={async () => {
                 setAuthBusy(true);
                 try {
-                  await signInWithGoogle();
+                  if (isAnonymous) {
+                    await upgradeWithGoogle();
+                  } else {
+                    await signInWithGoogle();
+                  }
                 } finally {
                   setAuthBusy(false);
                 }
               }}
             >
-              {isAnonymous ? 'Upgrade To Google Sign-In' : 'Re-auth With Google'}
+              {isAnonymous ? 'Upgrade Trial To Google Account' : 'Re-auth With Google'}
             </Button>
             {!isAnonymous ? (
               <Button
@@ -66,8 +87,9 @@ export default function SettingsPage() {
             ) : null}
           </div>
           <p className="muted">
-            Apple Books sync requests attach to this Firebase user ID. Use one stable signed-in
-            account if you want the same library on production and future devices.
+            {isAnonymous
+              ? 'Use Sign In if you already have a Google-backed Recall account. Use Upgrade if you want to keep this anonymous trial account and attach Google to it.'
+              : 'Apple Books sync requests attach to this Firebase user ID. Use one stable signed-in account if you want the same library on production and future devices.'}
           </p>
         </Card>
         <Card>

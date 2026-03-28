@@ -18,8 +18,9 @@ import {
   auth,
   ensureSignedIn,
   getFriendlyAuthError,
-  signInOrLinkWithGoogle,
+  signInWithGoogle as signInWithGooglePopup,
   signOutUser,
+  upgradeAnonymousWithGoogle,
 } from './firebase';
 import {
   addRecallItem,
@@ -141,7 +142,18 @@ export function useRecallData() {
       importFromJson(rawJson, categories, settings, items, stagedHighlights),
     signInWithGoogle: async () => {
       try {
-        const user = await signInOrLinkWithGoogle();
+        const user = await signInWithGooglePopup();
+        setUid(user.uid);
+        setIsAnonymous(user.isAnonymous);
+        setError(null);
+      } catch (nextError) {
+        setError(getFriendlyAuthError(nextError));
+        throw nextError;
+      }
+    },
+    upgradeWithGoogle: async () => {
+      try {
+        const user = await upgradeAnonymousWithGoogle();
         setUid(user.uid);
         setIsAnonymous(user.isAnonymous);
         setError(null);

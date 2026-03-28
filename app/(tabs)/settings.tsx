@@ -42,6 +42,7 @@ export default function SettingsScreen() {
   const initializeCloudSync = useStore((s) => s.initializeCloudSync);
   const startAppleUpgrade = useStore((s) => s.startAppleUpgrade);
   const startGoogleUpgrade = useStore((s) => s.startGoogleUpgrade);
+  const startGoogleLogin = useStore((s) => s.startGoogleLogin);
   const createAccountLinkCode = useStore((s) => s.createAccountLinkCode);
   const redeemAccountLinkCode = useStore((s) => s.redeemAccountLinkCode);
   const signOutCloudUser = useStore((s) => s.signOutCloudUser);
@@ -134,6 +135,22 @@ export default function SettingsScreen() {
         error instanceof Error
           ? error.message
           : 'Unable to start Google sign-in.';
+      if (Platform.OS === 'web') {
+        alert(message);
+      } else {
+        Alert.alert('Error', message);
+      }
+    }
+  };
+
+  const handleGoogleLogin = async () => {
+    try {
+      await startGoogleLogin();
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'Unable to sign in with Google.';
       if (Platform.OS === 'web') {
         alert(message);
       } else {
@@ -260,7 +277,55 @@ export default function SettingsScreen() {
           />
         </View>
 
-        {Platform.OS === 'web' && !cloudIsStableAccount ? (
+        {Platform.OS === 'web' && cloudIsAnonymous ? (
+          <>
+            <TouchableOpacity
+              onPress={handleGoogleLogin}
+              style={[
+                styles.card,
+                styles.linkRow,
+                { backgroundColor: colors.surface, borderColor: colors.borderLight },
+              ]}
+              activeOpacity={0.7}
+            >
+              <View style={styles.linkLeft}>
+                <Ionicons name="log-in-outline" size={20} color={colors.tint} />
+                <Text style={[styles.linkText, { color: colors.text }]}>
+                  Sign In To Existing Google Account
+                </Text>
+              </View>
+              <Ionicons
+                name="chevron-forward"
+                size={16}
+                color={colors.textTertiary}
+              />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={handleGoogleUpgrade}
+              style={[
+                styles.card,
+                styles.linkRow,
+                { backgroundColor: colors.surface, borderColor: colors.borderLight },
+              ]}
+              activeOpacity={0.7}
+            >
+              <View style={styles.linkLeft}>
+                <Ionicons name="logo-google" size={20} color={colors.tint} />
+                <Text style={[styles.linkText, { color: colors.text }]}>
+                  Upgrade Trial To Google Account
+                </Text>
+              </View>
+              <Ionicons
+                name="chevron-forward"
+                size={16}
+                color={colors.textTertiary}
+              />
+            </TouchableOpacity>
+          </>
+        ) : null}
+
+        {Platform.OS === 'web' && !cloudIsStableAccount && !cloudIsAnonymous ? (
           <TouchableOpacity
             onPress={handleGoogleUpgrade}
             style={[
@@ -273,7 +338,7 @@ export default function SettingsScreen() {
             <View style={styles.linkLeft}>
               <Ionicons name="logo-google" size={20} color={colors.tint} />
               <Text style={[styles.linkText, { color: colors.text }]}>
-                Upgrade To Stable Google Account
+                Continue With Google
               </Text>
             </View>
             <Ionicons
@@ -418,7 +483,9 @@ export default function SettingsScreen() {
         </TouchableOpacity>
 
         <Text style={[styles.sectionNote, { color: colors.textTertiary }]}>
-          Recall now resolves a stable account before syncing durable data. Anonymous accounts are temporary and should be upgraded on web before using cross-device sync.
+          {Platform.OS === 'web' && cloudIsAnonymous
+            ? 'Use Sign In if you already have a Google-backed Recall account. Use Upgrade if you want to keep this anonymous trial account and attach Google to it.'
+            : 'Recall now resolves a stable account before syncing durable data. Anonymous accounts are temporary and should be upgraded on web before using cross-device sync.'}
         </Text>
         {cloudError ? (
           <Text style={[styles.sectionNote, { color: colors.destructive }]}>

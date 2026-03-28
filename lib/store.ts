@@ -27,6 +27,7 @@ import {
   signOutCurrentUser,
   startAppleSignIn,
   startGooglePopupAuth,
+  startGooglePopupSignIn,
   subscribeToResolvedSession,
 } from './firebase';
 import {
@@ -129,6 +130,7 @@ interface RecallStore extends PersistedRecallState {
   initializeCloudSync: () => void;
   startAppleUpgrade: () => Promise<void>;
   startGoogleUpgrade: () => Promise<void>;
+  startGoogleLogin: () => Promise<void>;
   createAccountLinkCode: () => Promise<AccountLinkCode>;
   redeemAccountLinkCode: (code: string) => Promise<void>;
   signOutCloudUser: () => Promise<void>;
@@ -628,6 +630,12 @@ export const useStore = create<RecallStore>()(
 
       startGoogleUpgrade: async () => {
         await startGooglePopupAuth();
+      },
+
+      startGoogleLogin: async () => {
+        await startGooglePopupSignIn();
+        currentSession = await ensureResolvedSession();
+        attachRemoteListeners(currentSession, set, get);
       },
 
       startAppleUpgrade: async () => {
