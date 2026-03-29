@@ -89,6 +89,26 @@ export function getNextReview(
   }
 }
 
+export function getReviewAtInterval(
+  item: RecallItem,
+  targetIntervalIndex: number
+): Partial<RecallItem> {
+  const now = Date.now();
+  const nextIndex = Math.max(
+    0,
+    Math.min(targetIntervalIndex, item.intervals.length - 1)
+  );
+  const nextInterval = item.intervals[nextIndex];
+
+  return {
+    intervalIndex: nextIndex,
+    currentInterval: nextInterval,
+    nextReviewDate: addDays(now, nextInterval),
+    reviewCount: item.reviewCount + 1,
+    lastReviewedAt: now,
+  };
+}
+
 export function isDueToday(item: RecallItem): boolean {
   const today = startOfDay(Date.now());
   const dueDate = startOfDay(item.nextReviewDate);

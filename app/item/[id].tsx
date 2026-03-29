@@ -16,7 +16,7 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import Colors from '@/constants/Colors';
 import { useStore } from '@/lib/store';
-import { getIntervalLabel } from '@/lib/srs';
+import { getIntervalLabel, getReviewAtInterval } from '@/lib/srs';
 import PriorityBadge from '@/components/PriorityBadge';
 import { WebPortal } from '@/components/WebPortal';
 import {
@@ -70,6 +70,7 @@ export default function ItemDetailScreen() {
   const isWeb = Platform.OS === 'web';
   const [showDetailsSheet, setShowDetailsSheet] = React.useState(false);
   const [priorityMenuOpen, setPriorityMenuOpen] = React.useState(false);
+  const [showCyclePicker, setShowCyclePicker] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
   const shimmerOpacity = React.useRef(new Animated.Value(0.3)).current;
 
@@ -96,6 +97,7 @@ export default function ItemDetailScreen() {
   // Show skeleton briefly on item change
   React.useEffect(() => {
     setLoading(true);
+    setShowCyclePicker(false);
     const timeout = setTimeout(() => setLoading(false), 350);
     return () => clearTimeout(timeout);
   }, [id]);
@@ -192,6 +194,7 @@ export default function ItemDetailScreen() {
   const closeDetailsSheet = () => {
     setShowDetailsSheet(false);
     setPriorityMenuOpen(false);
+    setShowCyclePicker(false);
   };
 
   const navigateAfterReview = () => {
@@ -257,6 +260,18 @@ export default function ItemDetailScreen() {
     if (!item || item.status === 'archived') return;
     markForgotten(item.id);
     showToast('Marked as forgotten', 'warning');
+    navigateAfterReview();
+  };
+
+  const handleCycleSelect = (targetIntervalIndex: number) => {
+    if (!item || item.status === 'archived') return;
+    const updates = getReviewAtInterval(item, targetIntervalIndex);
+    updateItem(item.id, updates);
+    setShowCyclePicker(false);
+    showToast(
+      `Next review moved to ${getIntervalLabel(updates.currentInterval as number)}`,
+      'success'
+    );
     navigateAfterReview();
   };
 
@@ -335,6 +350,13 @@ export default function ItemDetailScreen() {
     ? styles.columnFullWidth
     : styles.sideColumn;
 
+  const formatCycleValue = (days: number) => {
+    if (days < 7) return `${days}d`;
+    if (days < 30) return `${Math.round(days / 7)}w`;
+    if (days < 365) return `${Math.round(days / 30)}m`;
+    return `${Math.round(days / 365)}y`;
+  };
+
   if (!item) {
     return (
       <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -346,6 +368,10 @@ export default function ItemDetailScreen() {
       </View>
     );
   }
+
+  const reviewCycleOptions = item.intervals
+    .map((interval, index) => ({ interval, index }))
+    .filter(({ index }) => index > item.intervalIndex);
 
   const renderSkeleton = () => (
     <View style={styles.focusShell}>
@@ -468,6 +494,117 @@ export default function ItemDetailScreen() {
     </View>
   );
 
+  const renderCyclePicker = () => {
+    if (item.status === 'archived') {
+      return null;
+    }
+
+    const displayedCycleOptions = [...reviewCycleOptions].reverse();
+
+    return (
+      <>
+        {showCyclePicker ? (
+          <Pressable
+            style={styles.cycleDismissLayer}
+            onPress={() => setShowCyclePicker(false)}
+          />
+        ) : null}
+
+        <View style={styles.cyclePickerDock} pointerEvents="box-none">
+          {showCyclePicker && displayedCycleOptions.length > 0 ? (
+            <View
+              style={[
+                styles.cyclePickerStackShell,
+                {
+                  backgroundColor: colors.surfaceSecondary,
+                  borderColor: colors.borderLight,
+                  shadowColor: colors.shadow,
+                },
+              ]}
+            >
+              <View style={styles.cyclePickerStack}>
+                {displayedCycleOptions.map(({ interval, index }, optionIndex) => {
+                  const isDefaultNext = index === item.intervalIndex + 1;
+                  const sizeBoost =
+                    displayedCycleOptions.length <= 1
+                      ? 0
+                      : Math.round(
+                          ((displayedCycleOptions.length - 1 - optionIndex) /
+                            (displayedCycleOptions.length - 1)) *
+                            6
+                        );
+                  const optionSize = 28 + sizeBoost;
+
+                  return (
+                    <TouchableOpacity
+                      key={`${item.id}_${index}_${interval}`}
+                      onPress={() => handleCycleSelect(index)}
+                      activeOpacity={0.84}
+                      style={[
+                        styles.cycleOption,
+                        {
+                          width: optionSize,
+                          height: optionSize,
+                          borderRadius: optionSize / 2,
+                          backgroundColor: isDefaultNext
+                            ? colors.surface
+                            : colors.background,
+                          borderColor: 'transparent',
+                          shadowColor: colors.shadow,
+                          shadowOpacity: isDefaultNext ? 0.1 : 0.03,
+                          elevation: isDefaultNext ? 2 : 0,
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.cycleOptionText,
+                          { color: isDefaultNext ? colors.tint : colors.textSecondary },
+                        ]}
+                      >
+                        {formatCycleValue(interval)}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+          ) : null}
+
+          <TouchableOpacity
+            onPress={() => {
+              if (reviewCycleOptions.length === 0) return;
+              setShowCyclePicker((open) => !open);
+            }}
+            activeOpacity={0.82}
+            style={[
+              styles.cycleTrigger,
+              {
+                backgroundColor: showCyclePicker
+                  ? colors.surfaceSecondary
+                  : colors.surface,
+                borderColor: showCyclePicker ? 'transparent' : colors.border,
+                shadowColor: colors.shadow,
+                opacity: reviewCycleOptions.length === 0 ? 0.55 : 1,
+              },
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Choose next review cycle"
+          >
+            <Text
+              style={[
+                styles.cycleTriggerText,
+                { color: showCyclePicker ? colors.tint : colors.text },
+              ]}
+            >
+              {formatCycleValue(item.currentInterval)}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </>
+    );
+  };
+
   const renderFocusReview = () => (
     <View style={styles.focusShell}>
       <ScrollView
@@ -516,6 +653,8 @@ export default function ItemDetailScreen() {
       >
         {renderReviewActions()}
       </View>
+
+      {renderCyclePicker()}
     </View>
   );
 
@@ -997,6 +1136,62 @@ const styles = StyleSheet.create({
     paddingTop: 6,
     paddingBottom: 18,
     borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  cycleDismissLayer: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  cyclePickerDock: {
+    position: 'absolute',
+    right: 10,
+    bottom: 114,
+    alignItems: 'center',
+  },
+  cyclePickerStackShell: {
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 4,
+    paddingVertical: 4,
+    marginBottom: 8,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    elevation: 2,
+  },
+  cyclePickerStack: {
+    alignItems: 'center',
+    gap: 5,
+    paddingVertical: 1,
+  },
+  cycleOption: {
+    borderWidth: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+    shadowOffset: { width: 0, height: 6 },
+    shadowRadius: 10,
+  },
+  cycleOptionText: {
+    fontSize: 8,
+    fontWeight: '500',
+    letterSpacing: -0.05,
+  },
+  cycleTrigger: {
+    minWidth: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 8,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    elevation: 2,
+  },
+  cycleTriggerText: {
+    fontSize: 9,
+    fontWeight: '500',
+    letterSpacing: -0.08,
   },
   sheetOverlay: {
     flex: 1,

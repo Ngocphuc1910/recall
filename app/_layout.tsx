@@ -131,7 +131,7 @@ function RootLayoutNav() {
         <Stack.Screen
           name="item/[id]"
           options={{
-            headerTitle: 'Item Detail',
+            headerTitle: 'Recall',
             headerTitleAlign: 'center',
             headerTitleStyle: {
               fontSize: 15,
