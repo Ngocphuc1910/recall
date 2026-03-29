@@ -142,6 +142,12 @@ function RootLayoutNav() {
             },
           }}
         />
+        <Stack.Screen
+          name="archived"
+          options={{
+            headerTitle: 'Archived',
+          }}
+        />
       </Stack>
       {toast ? (
         <View

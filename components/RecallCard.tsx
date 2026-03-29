@@ -32,10 +32,18 @@ interface Props {
   onPress: () => void;
   onRecall: () => void;
   onForget: () => void;
+  onArchive?: () => void;
   expanded?: boolean;
 }
 
-export default function RecallCard({ item, onPress, onRecall, onForget, expanded }: Props) {
+export default function RecallCard({
+  item,
+  onPress,
+  onRecall,
+  onForget,
+  onArchive,
+  expanded,
+}: Props) {
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme];
   const category = useStore((s) => s.getCategoryById(item.categoryId));
@@ -151,29 +159,51 @@ export default function RecallCard({ item, onPress, onRecall, onForget, expanded
           </View>
 
           <View style={styles.itemFooter}>
-            <View
-              style={[
-                styles.categoryPill,
-                {
-                  backgroundColor:
-                    (category?.color ?? colors.tint) + '15',
-                },
-              ]}
-            >
-              <Text
+            <View style={styles.footerBadges}>
+              <View
                 style={[
-                  styles.categoryPillText,
-                  { color: category?.color ?? colors.tint },
+                  styles.categoryPill,
+                  {
+                    backgroundColor:
+                      (category?.color ?? colors.tint) + '15',
+                  },
                 ]}
               >
-                {category?.name ?? 'Other'}
-              </Text>
+                <Text
+                  style={[
+                    styles.categoryPillText,
+                    { color: category?.color ?? colors.tint },
+                  ]}
+                >
+                  {category?.name ?? 'Other'}
+                </Text>
+              </View>
+              <PriorityBadge
+                priorityCode={item.priorityCode}
+                priorityLabel={item.priorityLabel}
+                compact
+              />
             </View>
-            <PriorityBadge
-              priorityCode={item.priorityCode}
-              priorityLabel={item.priorityLabel}
-              compact
-            />
+
+            {onArchive ? (
+              <TouchableOpacity
+                onPress={(event) => {
+                  event.stopPropagation?.();
+                  onArchive();
+                }}
+                hitSlop={10}
+                activeOpacity={0.78}
+                style={styles.archiveAction}
+                accessibilityRole="button"
+                accessibilityLabel="Archive item"
+              >
+                <Ionicons
+                  name="archive-outline"
+                  size={18}
+                  color={colors.textTertiary}
+                />
+              </TouchableOpacity>
+            ) : null}
           </View>
         </View>
       </View>
@@ -390,9 +420,15 @@ const styles = StyleSheet.create({
   itemFooter: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 12,
+  },
+  footerBadges: {
+    flexDirection: 'row',
+    alignItems: 'center',
     flexWrap: 'wrap',
     gap: 10,
-    marginTop: 12,
+    flex: 1,
   },
   categoryPill: {
     borderRadius: 999,
@@ -402,5 +438,13 @@ const styles = StyleSheet.create({
   categoryPillText: {
     fontSize: 11,
     fontWeight: '700',
+  },
+  archiveAction: {
+    width: 22,
+    height: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 10,
+    opacity: 0.9,
   },
 });

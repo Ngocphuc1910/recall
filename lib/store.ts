@@ -95,6 +95,7 @@ interface RecallStore extends PersistedRecallState {
   updateItem: (id: string, updates: Partial<RecallItem>) => void;
   deleteItem: (id: string) => void;
   archiveItem: (id: string) => void;
+  unarchiveItem: (id: string) => void;
   markRecalled: (id: string) => void;
   markForgotten: (id: string) => void;
 
@@ -211,6 +212,15 @@ export const useStore = create<RecallStore>()(
         set((state) => ({
           items: state.items.map((item) =>
             item.id === id ? { ...item, status: 'archived' as const } : item
+          ),
+        }));
+        scheduleCloudSync(get, set);
+      },
+
+      unarchiveItem: (id) => {
+        set((state) => ({
+          items: state.items.map((item) =>
+            item.id === id ? { ...item, status: 'active' as const } : item
           ),
         }));
         scheduleCloudSync(get, set);

@@ -514,6 +514,43 @@ export default function SettingsScreen() {
 
       <View style={styles.section}>
         <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
+          ARCHIVE
+        </Text>
+        <TouchableOpacity
+          onPress={() => router.push('/archived')}
+          style={[
+            styles.card,
+            styles.linkRow,
+            { backgroundColor: colors.surface, borderColor: colors.borderLight },
+          ]}
+          activeOpacity={0.7}
+        >
+          <View style={styles.linkLeft}>
+            <Ionicons name="archive-outline" size={20} color={colors.tint} />
+            <View>
+              <Text style={[styles.linkText, { color: colors.text }]}>
+                Archived Items
+              </Text>
+              <Text style={[styles.linkSubtext, { color: colors.textSecondary }]}>
+                Hidden from Today and Library, kept for reference.
+              </Text>
+            </View>
+          </View>
+          <View style={styles.linkRight}>
+            <Text style={[styles.linkValue, { color: colors.textSecondary }]}>
+              {archivedCount}
+            </Text>
+            <Ionicons
+              name="chevron-forward"
+              size={16}
+              color={colors.textTertiary}
+            />
+          </View>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.section}>
+        <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
           REVIEW INTERVALS (DAYS)
         </Text>
         <View
@@ -901,6 +938,20 @@ const styles = StyleSheet.create({
   },
   linkLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   linkText: { fontSize: 16, fontWeight: '500' },
+  linkSubtext: {
+    fontSize: 13,
+    marginTop: 2,
+  },
+  linkRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginLeft: 12,
+  },
+  linkValue: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
   linkCodeInput: {
     borderWidth: 1,
     borderRadius: 10,

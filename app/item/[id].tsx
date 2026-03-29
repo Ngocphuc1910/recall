@@ -110,7 +110,8 @@ export default function ItemDetailScreen() {
   );
   const markRecalled = useStore((s) => s.markRecalled);
   const markForgotten = useStore((s) => s.markForgotten);
-  const deleteItem = useStore((s) => s.deleteItem);
+  const archiveItem = useStore((s) => s.archiveItem);
+  const unarchiveItem = useStore((s) => s.unarchiveItem);
   const updateItem = useStore((s) => s.updateItem);
   const updateSettings = useStore((s) => s.updateSettings);
   const showToast = useStore((s) => s.showToast);
@@ -132,10 +133,46 @@ export default function ItemDetailScreen() {
     return `${day}/${month}/${year}`;
   };
 
-  const handleDelete = () => {
-    if (!item) return;
-    deleteItem(item.id);
-    showToast('Item deleted', 'destructive');
+  const handleArchive = () => {
+    if (!item || item.status === 'archived') return;
+    archiveItem(item.id);
+    showToast('Item archived', 'success');
+    closeDetailsSheet();
+
+    if (sourceView === 'library') {
+      router.replace('/library');
+      return;
+    }
+
+    if (sourceView === 'today') {
+      router.replace('/');
+      return;
+    }
+
+    if (sourceView === 'archived') {
+      router.replace('/archived');
+      return;
+    }
+
+    router.back();
+  };
+
+  const handleUnarchive = () => {
+    if (!item || item.status !== 'archived') return;
+    unarchiveItem(item.id);
+    showToast('Item moved back to library', 'success');
+    closeDetailsSheet();
+
+    if (sourceView === 'archived') {
+      router.replace('/library');
+      return;
+    }
+
+    if (sourceView === 'today') {
+      router.replace('/');
+      return;
+    }
+
     router.back();
   };
 
@@ -210,14 +247,14 @@ export default function ItemDetailScreen() {
   };
 
   const handleRecall = () => {
-    if (!item) return;
+    if (!item || item.status === 'archived') return;
     markRecalled(item.id);
     showToast('Marked as recalled', 'success');
     navigateAfterReview();
   };
 
   const handleForgot = () => {
-    if (!item) return;
+    if (!item || item.status === 'archived') return;
     markForgotten(item.id);
     showToast('Marked as forgotten', 'warning');
     navigateAfterReview();
@@ -257,7 +294,7 @@ export default function ItemDetailScreen() {
 
       if (event.key === 'Delete' || event.key === 'Backspace') {
         event.preventDefault();
-        handleDelete();
+        handleArchive();
       }
 
       if (event.key === 'Escape') {
@@ -269,6 +306,7 @@ export default function ItemDetailScreen() {
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [
+    handleArchive,
     handleForgot,
     handleRecall,
     priorityMenuOpen,
@@ -337,27 +375,43 @@ export default function ItemDetailScreen() {
     </View>
   );
 
-  const renderReviewActions = () => (
-    <View style={styles.actionRow}>
-      <TouchableOpacity
-        onPress={handleForgot}
-        style={[styles.secondaryAction, { backgroundColor: colors.warning }]}
-        activeOpacity={0.86}
+  const renderReviewActions = () =>
+    item.status === 'archived' ? (
+      <View
+        style={[
+          styles.archivedNotice,
+          {
+            backgroundColor: colors.surfaceSecondary,
+            borderColor: colors.border,
+          },
+        ]}
       >
-        <Ionicons name="refresh-outline" size={22} color="#fff" />
-        <Text style={styles.primaryActionText}>Forgot</Text>
-      </TouchableOpacity>
+        <Ionicons name="archive" size={18} color={colors.textSecondary} />
+        <Text style={[styles.archivedNoticeText, { color: colors.textSecondary }]}>
+          Archived items stay out of recall and library, but remain available for reference.
+        </Text>
+      </View>
+    ) : (
+      <View style={styles.actionRow}>
+        <TouchableOpacity
+          onPress={handleForgot}
+          style={[styles.secondaryAction, { backgroundColor: colors.warning }]}
+          activeOpacity={0.86}
+        >
+          <Ionicons name="refresh-outline" size={22} color="#fff" />
+          <Text style={styles.primaryActionText}>Forgot</Text>
+        </TouchableOpacity>
 
-      <TouchableOpacity
-        onPress={handleRecall}
-        style={[styles.primaryAction, { backgroundColor: colors.success }]}
-        activeOpacity={0.86}
-      >
-        <Ionicons name="checkmark-circle-outline" size={22} color="#fff" />
-        <Text style={styles.primaryActionText}>I Recall</Text>
-      </TouchableOpacity>
-    </View>
-  );
+        <TouchableOpacity
+          onPress={handleRecall}
+          style={[styles.primaryAction, { backgroundColor: colors.success }]}
+          activeOpacity={0.86}
+        >
+          <Ionicons name="checkmark-circle-outline" size={22} color="#fff" />
+          <Text style={styles.primaryActionText}>I Recall</Text>
+        </TouchableOpacity>
+      </View>
+    );
 
   const renderHeroTopRow = () => (
     <View style={styles.heroTopRow}>
@@ -387,6 +441,29 @@ export default function ItemDetailScreen() {
           priorityCode={item.priorityCode}
           priorityLabel={item.priorityLabel}
         />
+
+        {item.status === 'archived' ? (
+          <View
+            style={[
+              styles.archivedStatusBadge,
+              { backgroundColor: colors.surfaceSecondary, borderColor: colors.border },
+            ]}
+          >
+            <Ionicons
+              name="archive-outline"
+              size={13}
+              color={colors.textSecondary}
+            />
+            <Text
+              style={[
+                styles.archivedStatusBadgeText,
+                { color: colors.textSecondary },
+              ]}
+            >
+              Archived
+            </Text>
+          </View>
+        ) : null}
       </View>
     </View>
   );
@@ -746,26 +823,49 @@ export default function ItemDetailScreen() {
             },
           ]}
         >
-          <TouchableOpacity
-            onPress={handleDelete}
-            style={[
-              styles.deleteCard,
-              {
-                backgroundColor: colors.surface,
-                borderColor: colors.borderLight,
-              },
-            ]}
-            activeOpacity={0.78}
-          >
-            <Ionicons
-              name="trash-outline"
-              size={18}
-              color={colors.destructive}
-            />
-            <Text style={[styles.deleteText, { color: colors.destructive }]}>
-              Delete Item
-            </Text>
-          </TouchableOpacity>
+          {item.status === 'active' ? (
+            <TouchableOpacity
+              onPress={handleArchive}
+              style={[
+                styles.deleteCard,
+                {
+                  backgroundColor: colors.surface,
+                  borderColor: colors.borderLight,
+                },
+              ]}
+              activeOpacity={0.78}
+            >
+              <Ionicons
+                name="archive-outline"
+                size={18}
+                color={colors.destructive}
+              />
+              <Text style={[styles.deleteText, { color: colors.destructive }]}>
+                Archive Item
+              </Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              onPress={handleUnarchive}
+              style={[
+                styles.deleteCard,
+                {
+                  backgroundColor: colors.surface,
+                  borderColor: colors.borderLight,
+                },
+              ]}
+              activeOpacity={0.78}
+            >
+              <Ionicons
+                name="arrow-undo-outline"
+                size={18}
+                color={colors.tint}
+              />
+              <Text style={[styles.deleteText, { color: colors.tint }]}>
+                Unarchive Item
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
     </View>
@@ -986,6 +1086,20 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 8,
   },
+  archivedStatusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 6,
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  archivedStatusBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
   categoryBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1055,6 +1169,22 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 12,
     marginTop: 20,
+  },
+  archivedNotice: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    marginTop: 20,
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  archivedNoticeText: {
+    flex: 1,
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '500',
   },
   primaryAction: {
     flex: 1.2,

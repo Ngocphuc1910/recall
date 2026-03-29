@@ -79,8 +79,10 @@ export default function TodayScreen() {
   const items = useStore((s) => s.items);
   const categories = useStore((s) => s.categories);
   const addItem = useStore((s) => s.addItem);
+  const archiveItem = useStore((s) => s.archiveItem);
   const markRecalled = useStore((s) => s.markRecalled);
   const markForgotten = useStore((s) => s.markForgotten);
+  const showToast = useStore((s) => s.showToast);
   const webViewportMode = useStore(
     (s) => s.settings.webViewportMode ?? 'desktop'
   );
@@ -253,6 +255,11 @@ export default function TodayScreen() {
 
     resetAddForm();
     closeAddModal();
+  };
+
+  const handleArchiveItem = (itemId: string) => {
+    archiveItem(itemId);
+    showToast('Item archived', 'success');
   };
 
   const renderAddFormCard = () => (
@@ -760,6 +767,7 @@ export default function TodayScreen() {
               }
               onRecall={() => markRecalled(item.id)}
               onForget={() => markForgotten(item.id)}
+              onArchive={() => handleArchiveItem(item.id)}
               expanded={expandedCards}
             />
           )}
